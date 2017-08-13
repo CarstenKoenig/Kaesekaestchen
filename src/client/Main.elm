@@ -1,27 +1,92 @@
 module Main exposing (..)
 
 import Html exposing (Html)
-import Html.Attributes as Attr
 import Svg exposing (Svg)
 import Svg.Attributes as SAttr
+import Svg.Events as SEv
 
 
-main : Svg msg
+main : Program Never Model Msg
 main =
+    Html.beginnerProgram
+        { model = Model Nothing
+        , view = view
+        , update = update
+        }
+
+
+type alias Model =
+    { hoverOver : Maybe SegCoord
+    }
+
+
+type Msg
+    = HoverIn SegCoord
+    | HoverOut
+
+
+type SegCoord
+    = HCoord ( Int, Int )
+    | VCoord ( Int, Int )
+
+
+update : Msg -> Model -> Model
+update msg model =
+    case msg of
+        HoverIn coord ->
+            { model | hoverOver = Just coord }
+
+        HoverOut ->
+            { model | hoverOver = Nothing }
+
+
+view : Model -> Html Msg
+view model =
     Svg.svg
         [ SAttr.width "100%"
         , SAttr.height "100%"
-        , SAttr.viewBox "0 0 100 100"
+        , SAttr.viewBox "-5 -5 110 110"
         ]
-        [ drawSegment 5 ( 0, 50 ) ( 50, 50 )
-        , drawSegment 5 ( 50, 0 ) ( 50, 50 )
-        , drawSegment 5 ( 50, 50 ) ( 100, 50 )
-        , drawSegment 5 ( 50, 50 ) ( 50, 100 )
-        ]
+        (drawGrid model)
 
 
-drawSegment : Float -> ( Float, Float ) -> ( Float, Float ) -> Svg msg
-drawSegment strokeWidth ( x0, y0 ) ( x1, y1 ) =
+drawGrid : Model -> List (Svg Msg)
+drawGrid model =
+    List.concatMap
+        (\i -> List.append (drawHLine model i) (drawVLine model i))
+        (List.range 0 10)
+
+
+drawHLine : Model -> Int -> List (Svg Msg)
+drawHLine model y =
+    List.map (\x -> drawSegment model (HCoord ( x, y ))) (List.range 0 9)
+
+
+drawVLine : Model -> Int -> List (Svg Msg)
+drawVLine model x =
+    List.map (\y -> drawSegment model (VCoord ( x, y ))) (List.range 0 9)
+
+
+drawSegment : Model -> SegCoord -> Svg Msg
+drawSegment model coord =
+    case coord of
+        HCoord ( x, y ) ->
+            drawSegmentSvg model
+                coord
+                1
+                ( 10 * toFloat x, 10 * toFloat y )
+                ( 10 * toFloat (x + 1), 10 * toFloat y )
+
+        VCoord ( x, y ) ->
+            drawSegmentSvg model
+                coord
+                1
+                ( 10 * toFloat x, 10 * toFloat y )
+                ( 10 * toFloat x, 10 * toFloat (y + 1) )
+
+
+drawSegmentSvg : Model -> SegCoord -> Float -> ( Float, Float ) -> ( Float, Float ) -> Svg Msg
+drawSegmentSvg model coord strokeWidth ( x0, y0 ) ( x1, y1 ) =
     let
         sw =
             strokeWidth
@@ -47,11 +112,19 @@ drawSegment strokeWidth ( x0, y0 ) ( x1, y1 ) =
             , ( x0 + dX - oX, y0 + dY - oY )
             , ( x0, y0 )
             ]
+
+        color =
+            if model.hoverOver == Just coord then
+                "blue"
+            else
+                "black"
     in
         Svg.polygon
-            [ SAttr.fill "black"
-            , SAttr.strokeWidth "1"
+            [ SAttr.fill color
+            , SAttr.strokeWidth "0.5"
             , SAttr.stroke "white"
             , SAttr.points (String.join " " (List.map showCoord pts))
+            , SEv.onMouseOver (HoverIn coord)
+            , SEv.onMouseOut HoverOut
             ]
             []
