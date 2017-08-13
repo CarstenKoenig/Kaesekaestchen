@@ -12,7 +12,7 @@ import Dict exposing (Dict)
 main : Program Never Model Msg
 main =
     Html.beginnerProgram
-        { model = Model Blue Nothing Dict.empty
+        { model = Model Blue Nothing Dict.empty Dict.empty
         , view = view
         , update = update
         }
@@ -21,6 +21,7 @@ main =
 type alias Model =
     { player : Color
     , hoverOver : Maybe SegCoord
+    , takenSegments : Dict SegCoordComp Color
     , wonCells : Dict Coord Color
     }
 
@@ -29,6 +30,8 @@ type Msg
     = HoverIn SegCoord
     | HoverOut
     | ClickCell Coord
+    | ClickSeq SegCoord
+    | NoOp
 
 
 type SegCoord
@@ -45,20 +48,43 @@ type alias Coord =
     ( Int, Int )
 
 
+type alias SegCoordComp =
+    ( Char, Int, Int )
+
+
 update : Msg -> Model -> Model
 update msg model =
     case msg of
+        NoOp ->
+            model
+
         HoverIn coord ->
             { model | hoverOver = Just coord }
 
         HoverOut ->
             { model | hoverOver = Nothing }
 
+        ClickSeq coord ->
+            { model
+                | takenSegments = Dict.insert (toComp coord) model.player model.takenSegments
+                , player = nextColor model.player
+            }
+
         ClickCell coord ->
             { model
                 | wonCells = Dict.insert coord model.player model.wonCells
                 , player = nextColor model.player
             }
+
+
+toComp : SegCoord -> SegCoordComp
+toComp coord =
+    case coord of
+        VCoord ( x, y ) ->
+            ( 'V', x, y )
+
+        HCoord ( x, y ) ->
+            ( 'H', x, y )
 
 
 nextColor : Color -> Color
@@ -69,6 +95,16 @@ nextColor color =
 
         Blue ->
             Red
+
+
+colorKey : Color -> String
+colorKey color =
+    case color of
+        Red ->
+            "red"
+
+        Blue ->
+            "blue"
 
 
 view : Model -> Html Msg
@@ -134,15 +170,9 @@ fillRect : Model -> Coord -> Svg Msg
 fillRect model ( x, y ) =
     let
         color =
-            case Dict.get ( x, y ) model.wonCells of
-                Nothing ->
-                    "white"
-
-                Just Red ->
-                    "red"
-
-                Just Blue ->
-                    "blue"
+            Dict.get ( x, y ) model.wonCells
+                |> Maybe.map colorKey
+                |> Maybe.withDefault "white"
     in
         Svg.rect
             [ SAttr.x (toString (x * 10))
@@ -192,10 +222,20 @@ drawSegmentSvg model coord strokeWidth ( x0, y0 ) ( x1, y1 ) =
             ]
 
         color =
-            if model.hoverOver == Just coord then
-                "blue"
+            Dict.get (toComp coord) model.takenSegments
+                |> Maybe.map colorKey
+                |> Maybe.withDefault
+                    (if model.hoverOver == Just coord then
+                        colorKey model.player
+                     else
+                        "lightgrey"
+                    )
+
+        onClick =
+            if Dict.member (toComp coord) model.takenSegments then
+                NoOp
             else
-                "black"
+                (ClickSeq coord)
     in
         SKeyed.node "g"
             []
@@ -207,6 +247,7 @@ drawSegmentSvg model coord strokeWidth ( x0, y0 ) ( x1, y1 ) =
                     , SAttr.points (String.join " " (List.map showCoord pts))
                     , SEv.onMouseOver (HoverIn coord)
                     , SEv.onMouseOut HoverOut
+                    , SEv.onClick onClick
                     ]
                     []
               )
