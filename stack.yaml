@@ -35,8 +35,14 @@ resolver: lts-9.0
 # A package marked 'extra-dep: true' will only be built if demanded by a
 # non-dependency (i.e. a user package), and its test suites and benchmarks
 # will not be run. This is useful for tweaking upstream packages.
+
 packages:
-- .
+- location: .
+- location:
+    git: https://github.com/CarstenKoenig/elm-export.git
+    commit: 2666d81b0cd338260d6367f4d8ea5ddaa9a6e4c9
+  extra-dep: true
+
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps: []
