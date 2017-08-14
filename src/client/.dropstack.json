@@ -1,0 +1,10 @@
+{
+  "variables": "",
+  "instances": 1,
+  "type": "docker",
+  "excludes": [
+    "elm-stuff/"
+  ],
+  "name": "uwnakami",
+  "serviceUrl": "uwnakami.cloud.dropstack.run"
+}

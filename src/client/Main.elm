@@ -110,9 +110,7 @@ colorKey color =
 view : Model -> Html Msg
 view model =
     Svg.svg
-        [ SAttr.width "100%"
-        , SAttr.height "100%"
-        , SAttr.viewBox "-5 -5 110 110"
+        [ SAttr.viewBox "-5 -5 110 110"
         ]
         (List.concat
             [ fillGrid model
