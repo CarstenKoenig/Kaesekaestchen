@@ -40,7 +40,7 @@ packages:
 - location: .
 - location:
     git: https://github.com/CarstenKoenig/elm-export.git
-    commit: 2666d81b0cd338260d6367f4d8ea5ddaa9a6e4c9
+    commit: bad9f74e211fae26f95fda86bedcacdbba2c6ae2
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
