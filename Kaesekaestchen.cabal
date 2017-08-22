@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src/server
   exposed-modules:     Lib
                      , Game
+                     , ElmExport
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , bytestring
@@ -29,6 +30,7 @@ library
                      , wai
                      , warp
   default-language:    Haskell2010
+  ghc-options:       -Wall
 
 executable Kaesekaestchen
   hs-source-dirs:      app
