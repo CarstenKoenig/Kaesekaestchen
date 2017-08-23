@@ -32,6 +32,7 @@ type API =
   "api" :> "games" :> Get '[JSON] [String]
   :<|> "api" :> "game" :> Capture "gameId" String :> Get '[JSON] (Maybe GameState)
   :<|> "api" :> "game" :> "new" :> Post '[JSON] String
+  :<|> "api" :> "game" :> Capture "gameId" String :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameState)
 
 
 startApp :: IO ()
@@ -53,6 +54,7 @@ server =
   getGameList
   :<|> getGame
   :<|> startGame
+  :<|> applyMove
 
 
 getGameList :: StateHandler [String]
@@ -62,21 +64,34 @@ getGameList =
 
 getGame :: String -> StateHandler (Maybe GameState)
 getGame gameId =
-  State.gets (\m -> UUID.fromString gameId >>= flip Map.lookup m)
+  State.gets (\m -> UUID.fromString gameId >>= fmap calculateGameState . flip Map.lookup m)
 
 
 startGame :: StateHandler String
 startGame = do
   uid <- liftIO UUID.nextRandom
-  let game = newGame
-  State.modify (Map.insert uid game)
+  State.modify (Map.insert uid [])
   return $ UUID.toString uid
+
+
+applyMove :: String -> SegCoord -> StateHandler (Maybe GameState)
+applyMove gameId atCoord =
+  case UUID.fromString gameId of
+    Nothing -> return Nothing
+    Just uid -> do
+      foundMoves <- State.gets (Map.lookup uid)
+      case foundMoves of
+        Nothing -> return Nothing
+        Just moves -> do
+          let moves' = moves ++ [atCoord]
+          State.modify (Map.insert uid moves')
+          return . Just $ calculateGameState moves'
 
 
 type StateHandler = StateT AppState IO
 
 
-type AppState = Map UUID GameState
+type AppState = Map UUID [SegCoord]
 
 
 stateToHandler :: MVar AppState -> StateT AppState IO :~> Handler
