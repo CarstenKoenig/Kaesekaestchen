@@ -14,6 +14,7 @@ import qualified Servant.Elm as Elm
 
 
 import Game
+import Lib
 
 
 toJson :: GameState -> ByteString
@@ -27,12 +28,14 @@ writeElmFile = Elm.specsToDir [spec]
 spec :: Spec
 spec = Spec
   ["Api", "Game"]
-  [ Elm.defElmImports
-  , Elm.toElmTypeSource    (Proxy :: Proxy Player)
+  ( Elm.defElmImports
+  : Elm.generateElmForAPI  (Proxy :: Proxy API)
+  ++
+  [ Elm.toElmTypeSource    (Proxy :: Proxy Player)
   , Elm.toElmDecoderSource (Proxy :: Proxy Player)
   , Elm.toElmTypeSource    (Proxy :: Proxy SegCoord)
   , Elm.toElmDecoderSource (Proxy :: Proxy SegCoord)
   , Elm.toElmDecoderSource (Proxy :: Proxy SegCoord)
   , Elm.toElmTypeSource    (Proxy :: Proxy GameState)
   , Elm.toElmDecoderSource (Proxy :: Proxy GameState)
-  ]
+  ])

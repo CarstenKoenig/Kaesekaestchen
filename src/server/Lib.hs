@@ -4,6 +4,7 @@
 
 module Lib
     ( GameId (..)
+    , API
     , startApp
     , app
     ) where
@@ -22,6 +23,7 @@ import           Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import           Elm (ElmType(..))
+import qualified Elm
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Servant
@@ -120,6 +122,8 @@ newToken = TurnToken . UUID.toString <$> UUID.nextRandom
 
 newtype GameId = GameId UUID
 
+instance ElmType GameId where
+  toElmType _ = Elm.ElmPrimitive Elm.EString
 
 instance ToJSON GameId where
   toJSON (GameId uid) = toJSON $ UUID.toString uid
