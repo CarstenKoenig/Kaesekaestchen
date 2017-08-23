@@ -49,6 +49,7 @@ test-suite Kaesekaestchen-test
   build-depends:       base
                      , Kaesekaestchen
                      , bytestring
+                     , containers
                      , hspec
                      , hspec-wai
                      , hspec-wai-json

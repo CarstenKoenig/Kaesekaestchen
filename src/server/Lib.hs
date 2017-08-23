@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
 {-# LANGUAGE DeriveGeneric   #-}
 
@@ -9,12 +8,15 @@ module Lib
     ) where
 
 import           GHC.Generics (Generic)
-import           Control.Monad.Trans.State.Strict (State)
+import           Control.Concurrent.MVar (MVar)
+import qualified Control.Concurrent.MVar as MVar
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Control.Monad.Trans.State.Strict as State
 import           Data.Aeson
-import           Data.Aeson.TH
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import           Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import           Elm (ElmType(..))
@@ -29,43 +31,62 @@ import           Game
 type API =
   "api" :> "games" :> Get '[JSON] [String]
   :<|> "api" :> "game" :> Capture "gameId" String :> Get '[JSON] (Maybe GameState)
+  :<|> "api" :> "game" :> "new" :> Post '[JSON] String
 
 
 startApp :: IO ()
-startApp = run 8080 app
+startApp = do
+  storage <- MVar.newMVar Map.empty
+  run 8080 $ app storage
 
 
-app :: Application
-app = serve api $ enter (stateToHandler start) server
+app :: MVar AppState -> Application
+app storage =
+  serve api $ enter (stateToHandler storage) server
   where
     api :: Proxy API
     api = Proxy
-    start :: AppState
-    start = ()
 
 
 server :: ServerT API StateHandler
-server = getGameList :<|> getGame
+server =
+  getGameList
+  :<|> getGame
+  :<|> startGame
 
 
 getGameList :: StateHandler [String]
-getGameList = return []
+getGameList =
+  State.gets (fmap UUID.toString . Map.keys)
 
 
 getGame :: String -> StateHandler (Maybe GameState)
-getGame gameId = undefined
+getGame gameId =
+  State.gets (\m -> UUID.fromString gameId >>= flip Map.lookup m)
 
 
-type StateHandler = State AppState
+startGame :: StateHandler String
+startGame = do
+  uid <- liftIO UUID.nextRandom
+  let game = newGame
+  State.modify (Map.insert uid game)
+  return $ UUID.toString uid
 
 
-type AppState = ()
+type StateHandler = StateT AppState IO
 
 
-stateToHandler :: AppState -> State AppState :~> Handler
-stateToHandler startWith = NT stateToHandler'
+type AppState = Map UUID GameState
+
+
+stateToHandler :: MVar AppState -> StateT AppState IO :~> Handler
+stateToHandler storage = NT stateToHandler'
   where
-    stateToHandler' comp = return (State.evalState comp startWith)
+    stateToHandler' comp = liftIO $ do
+      state <- MVar.takeMVar storage
+      (res, state') <- State.runStateT comp state
+      MVar.putMVar storage state'
+      return res
 
 
 newtype TurnToken = TurnToken String

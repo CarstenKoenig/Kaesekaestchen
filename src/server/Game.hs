@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Game
   ( Player (..)
@@ -7,6 +6,7 @@ module Game
   , SegCoord (..)
   , GameState (..)
   , calculateGameState
+  , newGame
   ) where
 
 import           GHC.Generics (Generic)
@@ -49,6 +49,10 @@ instance FromJSON SegCoord
 
 
 type Coord = (Int, Int)
+
+
+newGame :: GameState
+newGame = calculateGameState []
 
 
 calculateGameState :: [SegCoord] -> GameState
