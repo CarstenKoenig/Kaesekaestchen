@@ -23,8 +23,10 @@ library
                      , bytestring
                      , containers
                      , elm-export
+                     , mtl
                      , servant-elm
                      , servant-server
+                     , transformers
                      , text
                      , uuid
                      , wai
@@ -46,6 +48,7 @@ test-suite Kaesekaestchen-test
   main-is:             Spec.hs
   build-depends:       base
                      , Kaesekaestchen
+                     , bytestring
                      , hspec
                      , hspec-wai
                      , hspec-wai-json

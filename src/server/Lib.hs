@@ -9,45 +9,63 @@ module Lib
     ) where
 
 import           GHC.Generics (Generic)
+import           Control.Monad.Trans.State.Strict (State)
+import qualified Control.Monad.Trans.State.Strict as State
 import           Data.Aeson
 import           Data.Aeson.TH
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
-import           Elm (ElmType(..), Spec(Spec))
-import qualified Elm
+import           Elm (ElmType(..))
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Servant
 import           Servant.Elm (Proxy(Proxy))
-import qualified Servant.Elm as Elm
 
-data User = User
-  { userId        :: Int
-  , userFirstName :: String
-  , userLastName  :: String
-  } deriving (Eq, Show)
+import           Game
 
-$(deriveJSON defaultOptions ''User)
 
-type API = "users" :> Get '[JSON] [User]
+type API =
+  "api" :> "games" :> Get '[JSON] [String]
+  :<|> "api" :> "game" :> Capture "gameId" String :> Get '[JSON] (Maybe GameState)
+
 
 startApp :: IO ()
 startApp = run 8080 app
 
+
 app :: Application
-app = serve api server
+app = serve api $ enter (stateToHandler start) server
+  where
+    api :: Proxy API
+    api = Proxy
+    start :: AppState
+    start = ()
 
-api :: Proxy API
-api = Proxy
 
-server :: Server API
-server = return users
+server :: ServerT API StateHandler
+server = getGameList :<|> getGame
 
-users :: [User]
-users = [ User 1 "Isaac" "Newton"
-        , User 2 "Albert" "Einstein"
-        ]
 
+getGameList :: StateHandler [String]
+getGameList = return []
+
+
+getGame :: String -> StateHandler (Maybe GameState)
+getGame gameId = undefined
+
+
+type StateHandler = State AppState
+
+
+type AppState = ()
+
+
+stateToHandler :: AppState -> State AppState :~> Handler
+stateToHandler startWith = NT stateToHandler'
+  where
+    stateToHandler' comp = return (State.evalState comp startWith)
 
 
 newtype TurnToken = TurnToken String
