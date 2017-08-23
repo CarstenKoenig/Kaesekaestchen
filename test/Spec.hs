@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import           Lib (app)
+import           Lib (GameId, app)
 
 import qualified Control.Concurrent.MVar as MVar
 import           Data.Aeson (ToJSON, encode)
@@ -20,9 +20,8 @@ spec = with setupApp $
     describe "GET /api/games" $ do
         it "responds with 200" $
             get "/api/games" `shouldRespondWith` 200
-        it "responds with empty [String]" $
-            get "/api/games" `shouldRespondWith` jsonResponse ([] :: [String])
-
+        it "responds with empty [GameId]" $
+            get "/api/games" `shouldRespondWith` jsonResponse ([] :: [GameId])
   where
     setupApp = do
       storage <- MVar.newMVar Map.empty
