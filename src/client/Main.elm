@@ -4,9 +4,10 @@ import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Ev
 import Http
-import UrlParser as Url exposing (Parser, (</>))
 import Navigation as Nav exposing (Location)
+import Routing exposing (..)
 import Component.Game as Game exposing (GameId)
+import Component.Lobby as Lobby
 import Api.Game as Api exposing (Player(..), SegCoord(..), GameState)
 
 
@@ -29,17 +30,13 @@ type alias Model =
 
 
 type ViewModel
-    = NoContent
-    | InGame Game.Model
-
-
-type Route
-    = Home
-    | PlayGame GameId
+    = ViewLobby Lobby.Model
+    | ViewGame Game.Model
 
 
 type Msg
-    = InGameMsg Game.Msg
+    = GameMsg Game.Msg
+    | LobbyMsg Lobby.Msg
     | StartNewGameResult (Result Http.Error GameId)
     | LocationChanged Location
     | DismissError
@@ -49,7 +46,12 @@ init : Location -> ( Model, Cmd Msg )
 init location =
     case locationToRoute location of
         Nothing ->
-            Model Home NoContent Nothing ! [ Nav.modifyUrl <| routeToUrl Home ]
+            let
+                ( lobbyModel, lobbyCmd ) =
+                    Lobby.init
+            in
+                Model Lobby (ViewLobby lobbyModel) Nothing
+                    ! [ Nav.modifyUrl <| routeToUrl Lobby, Cmd.map LobbyMsg lobbyCmd ]
 
         Just route ->
             let
@@ -62,21 +64,22 @@ init location =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model.currentView of
-        NoContent ->
-            Sub.none
+        ViewLobby lobbyModel ->
+            Lobby.subscriptions lobbyModel
+                |> Sub.map LobbyMsg
 
-        InGame gameModel ->
+        ViewGame gameModel ->
             Game.subscriptions gameModel
-                |> Sub.map InGameMsg
+                |> Sub.map GameMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case model.currentView of
-        NoContent ->
-            updateNoContent model msg
+        ViewLobby lobbyModel ->
+            updateLobby model msg lobbyModel
 
-        InGame gameModel ->
+        ViewGame gameModel ->
             updateGame model msg gameModel
 
 
@@ -93,12 +96,13 @@ view model =
 
         bodyView =
             case model.currentView of
-                NoContent ->
-                    Html.text ""
+                ViewLobby lobbyModel ->
+                    Lobby.view lobbyModel
+                        |> Html.map LobbyMsg
 
-                InGame gameModel ->
+                ViewGame gameModel ->
                     Game.view gameModel
-                        |> Html.map InGameMsg
+                        |> Html.map GameMsg
     in
         Html.div []
             [ errorView
@@ -116,11 +120,18 @@ viewError error =
         [ Html.text error ]
 
 
-updateNoContent : Model -> Msg -> ( Model, Cmd Msg )
-updateNoContent model msg =
+updateLobby : Model -> Msg -> Lobby.Model -> ( Model, Cmd Msg )
+updateLobby model msg lobbyModel =
     case msg of
-        InGameMsg _ ->
-            { model | currentView = NoContent } ! []
+        GameMsg _ ->
+            model ! []
+
+        LobbyMsg lobbyMsg ->
+            let
+                ( newLobbyModel, lobbyCmd ) =
+                    Lobby.update lobbyMsg lobbyModel
+            in
+                { model | currentView = ViewLobby newLobbyModel } ! [ Cmd.map LobbyMsg lobbyCmd ]
 
         StartNewGameResult result ->
             handleStartNewGameResult model result
@@ -129,18 +140,21 @@ updateNoContent model msg =
             { model | error = Nothing } ! []
 
         LocationChanged loc ->
-            handleLocationChanged model loc
+            handleLocationChanged loc
 
 
 updateGame : Model -> Msg -> Game.Model -> ( Model, Cmd Msg )
 updateGame model msg gameModel =
     case msg of
-        InGameMsg gameMsg ->
+        GameMsg gameMsg ->
             let
                 ( newGameModel, gameCmd ) =
                     Game.update gameMsg gameModel
             in
-                { model | currentView = InGame newGameModel } ! [ Cmd.map InGameMsg gameCmd ]
+                { model | currentView = ViewGame newGameModel } ! [ Cmd.map GameMsg gameCmd ]
+
+        LobbyMsg _ ->
+            model ! []
 
         StartNewGameResult result ->
             handleStartNewGameResult model result
@@ -149,38 +163,27 @@ updateGame model msg gameModel =
             { model | error = Nothing } ! []
 
         LocationChanged loc ->
-            handleLocationChanged model loc
+            handleLocationChanged loc
 
 
-handleLocationChanged : Model -> Location -> ( Model, Cmd Msg )
-handleLocationChanged model loc =
-    case locationToRoute loc of
-        Just route ->
-            { model | currentRoute = route } ! []
-
-        Nothing ->
-            init loc
+handleLocationChanged : Location -> ( Model, Cmd Msg )
+handleLocationChanged =
+    init
 
 
 handleStartNewGameResult : Model -> Result Http.Error GameId -> ( Model, Cmd Msg )
 handleStartNewGameResult model result =
     case result of
         Err error ->
-            { model
-                | error = Just (toString error)
-                , currentView = NoContent
-            }
-                ! []
+            { model | error = Just (toString error) } ! []
 
         Ok gameId ->
             let
                 ( gameModel, gameCmd ) =
                     Game.init gameId
             in
-                { model
-                    | currentView = InGame gameModel
-                }
-                    ! [ Cmd.map InGameMsg gameCmd ]
+                { model | currentView = ViewGame gameModel }
+                    ! [ Cmd.map GameMsg gameCmd ]
 
 
 startNewGame : Cmd Msg
@@ -191,35 +194,16 @@ startNewGame =
 viewModelFromRoute : Route -> ( ViewModel, Cmd Msg )
 viewModelFromRoute route =
     case route of
-        Home ->
-            NoContent ! []
+        Lobby ->
+            let
+                ( lobbyModel, lobbyCmd ) =
+                    Lobby.init
+            in
+                ViewLobby lobbyModel ! [ Cmd.map LobbyMsg lobbyCmd ]
 
         PlayGame gameId ->
             let
                 ( gameModel, gameCmd ) =
                     Game.init gameId
             in
-                InGame gameModel ! [ Cmd.map InGameMsg gameCmd ]
-
-
-locationToRoute : Location -> Maybe Route
-locationToRoute =
-    Url.parsePath routeParser
-
-
-routeToUrl : Route -> String
-routeToUrl route =
-    case route of
-        Home ->
-            "/"
-
-        PlayGame gameId ->
-            "/game/" ++ gameId
-
-
-routeParser : Parser (Route -> a) a
-routeParser =
-    Url.oneOf
-        [ Url.map Home (Url.s "")
-        , Url.map PlayGame (Url.s "game" </> Url.string)
-        ]
+                ViewGame gameModel ! [ Cmd.map GameMsg gameCmd ]
