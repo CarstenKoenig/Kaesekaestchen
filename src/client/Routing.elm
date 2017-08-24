@@ -10,24 +10,24 @@ type Route
     | PlayGame GameId
 
 
-locationToRoute : Location -> Maybe Route
-locationToRoute =
-    Url.parsePath routeParser
+locationToRoute : String -> Location -> Maybe Route
+locationToRoute baseUrl =
+    Url.parsePath (routeParser baseUrl)
 
 
-routeToUrl : Route -> String
-routeToUrl route =
+routeToUrl : String -> Route -> String
+routeToUrl baseUrl route =
     case route of
         Lobby ->
-            "/"
+            baseUrl
 
         PlayGame gameId ->
-            "/game/" ++ gameId
+            baseUrl ++ "/game/" ++ gameId
 
 
-routeParser : Parser (Route -> a) a
-routeParser =
+routeParser : String -> Parser (Route -> a) a
+routeParser baseUrl =
     Url.oneOf
-        [ Url.map Lobby (Url.s "")
-        , Url.map PlayGame (Url.s "game" </> Url.string)
+        [ Url.map Lobby (Url.s baseUrl)
+        , Url.map PlayGame (Url.s baseUrl </> Url.s "game" </> Url.string)
         ]

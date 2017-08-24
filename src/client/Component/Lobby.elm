@@ -13,6 +13,7 @@ import Component.Game exposing (GameId)
 type alias Model =
     { runningGames : List GameId
     , error : Maybe String
+    , baseUrl : String
     }
 
 
@@ -20,12 +21,15 @@ type Msg
     = Refresh
     | LoadGamesResult (Result Http.Error (List GameId))
     | VisitGame GameId
+    | StartNewGame
+    | StartNewGameResult (Result Http.Error GameId)
 
 
-init : ( Model, Cmd Msg )
-init =
+init : String -> ( Model, Cmd Msg )
+init baseUrl =
     { runningGames = []
     , error = Nothing
+    , baseUrl = baseUrl
     }
         ! [ loadGames ]
 
@@ -56,21 +60,54 @@ update msg model =
             { model | runningGames = games } ! []
 
         VisitGame gameId ->
-            model ! [ Nav.newUrl (routeToUrl <| PlayGame gameId) ]
+            model ! [ Nav.newUrl (routeToUrl model.baseUrl <| PlayGame gameId) ]
+
+        StartNewGame ->
+            model ! [ startNewGame ]
+
+        StartNewGameResult (Err error) ->
+            -- TODO show error / move away
+            { model
+                | error = Just (toString error)
+            }
+                ! []
+
+        StartNewGameResult (Ok gameId) ->
+            model ! [ Nav.newUrl (routeToUrl model.baseUrl <| PlayGame gameId) ]
 
 
 view : Model -> Html Msg
 view model =
     Html.div
-        [ Attr.class "list-group" ]
-        (List.map viewGame model.runningGames)
+        [ Attr.class "container" ]
+        [ Html.div
+            [ Attr.class "row" ]
+            [ Html.h1 [] [ Html.text "Lobby" ] ]
+        , Html.div
+            [ Attr.class "row" ]
+            [ Html.div
+                [ Attr.class "list-group" ]
+                (List.map viewGame model.runningGames)
+            ]
+        , Html.div
+            [ Attr.class "row" ]
+            [ Html.div
+                [ Attr.class "btn-group", Attr.attribute "role" "group", Attr.attribute "aria-label" "Basic example" ]
+                [ Html.button
+                    [ Attr.type_ "button"
+                    , Attr.class "btn btn-secondary"
+                    , Ev.onClick StartNewGame
+                    ]
+                    [ Html.text "New" ]
+                ]
+            ]
+        ]
 
 
 viewGame : GameId -> Html Msg
 viewGame gameId =
-    Html.a
-        [ Attr.href "#"
-        , Attr.class "list-group-item list-group-item-action"
+    Html.button
+        [ Attr.class "list-group-item list-group-item-action"
         , Ev.onClick (VisitGame gameId)
         ]
         [ Html.text gameId ]
@@ -79,3 +116,8 @@ viewGame gameId =
 loadGames : Cmd Msg
 loadGames =
     Http.send LoadGamesResult Api.getApiGames
+
+
+startNewGame : Cmd Msg
+startNewGame =
+    Http.send StartNewGameResult Api.postApiGameNew

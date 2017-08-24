@@ -3,17 +3,16 @@ module Main exposing (..)
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Ev
-import Http
 import Navigation as Nav exposing (Location)
 import Routing exposing (..)
+import Flags exposing (..)
 import Component.Game as Game exposing (GameId)
 import Component.Lobby as Lobby
-import Api.Game as Api exposing (Player(..), SegCoord(..), GameState)
 
 
-main : Program Never Model Msg
+main : Program Flags Model Msg
 main =
-    Nav.program
+    Nav.programWithFlags
         LocationChanged
         { init = init
         , subscriptions = subscriptions
@@ -26,6 +25,7 @@ type alias Model =
     { currentRoute : Route
     , currentView : ViewModel
     , error : Maybe String
+    , flags : Flags
     }
 
 
@@ -37,28 +37,28 @@ type ViewModel
 type Msg
     = GameMsg Game.Msg
     | LobbyMsg Lobby.Msg
-    | StartNewGameResult (Result Http.Error GameId)
     | LocationChanged Location
     | DismissError
 
 
-init : Location -> ( Model, Cmd Msg )
-init location =
-    case locationToRoute location of
+init : Flags -> Location -> ( Model, Cmd Msg )
+init flags location =
+    case locationToRoute flags.baseUrl location of
         Nothing ->
             let
                 ( lobbyModel, lobbyCmd ) =
-                    Lobby.init
+                    Lobby.init flags.baseUrl
             in
-                Model Lobby (ViewLobby lobbyModel) Nothing
-                    ! [ Nav.modifyUrl <| routeToUrl Lobby, Cmd.map LobbyMsg lobbyCmd ]
+                Model Lobby (ViewLobby lobbyModel) Nothing flags
+                    ! [ Nav.modifyUrl <| routeToUrl flags.baseUrl Lobby, Cmd.map LobbyMsg lobbyCmd ]
 
         Just route ->
             let
                 ( viewModel, initCmd ) =
-                    viewModelFromRoute route
+                    viewModelFromRoute flags.baseUrl route
             in
-                Model route viewModel Nothing ! [ initCmd ]
+                Model route viewModel Nothing flags
+                    ! [ initCmd ]
 
 
 subscriptions : Model -> Sub Msg
@@ -133,14 +133,11 @@ updateLobby model msg lobbyModel =
             in
                 { model | currentView = ViewLobby newLobbyModel } ! [ Cmd.map LobbyMsg lobbyCmd ]
 
-        StartNewGameResult result ->
-            handleStartNewGameResult model result
-
         DismissError ->
             { model | error = Nothing } ! []
 
         LocationChanged loc ->
-            handleLocationChanged loc
+            handleLocationChanged model loc
 
 
 updateGame : Model -> Msg -> Game.Model -> ( Model, Cmd Msg )
@@ -156,48 +153,25 @@ updateGame model msg gameModel =
         LobbyMsg _ ->
             model ! []
 
-        StartNewGameResult result ->
-            handleStartNewGameResult model result
-
         DismissError ->
             { model | error = Nothing } ! []
 
         LocationChanged loc ->
-            handleLocationChanged loc
+            handleLocationChanged model loc
 
 
-handleLocationChanged : Location -> ( Model, Cmd Msg )
-handleLocationChanged =
-    init
+handleLocationChanged : Model -> Location -> ( Model, Cmd Msg )
+handleLocationChanged model =
+    init model.flags
 
 
-handleStartNewGameResult : Model -> Result Http.Error GameId -> ( Model, Cmd Msg )
-handleStartNewGameResult model result =
-    case result of
-        Err error ->
-            { model | error = Just (toString error) } ! []
-
-        Ok gameId ->
-            let
-                ( gameModel, gameCmd ) =
-                    Game.init gameId
-            in
-                { model | currentView = ViewGame gameModel }
-                    ! [ Cmd.map GameMsg gameCmd ]
-
-
-startNewGame : Cmd Msg
-startNewGame =
-    Http.send StartNewGameResult Api.postApiGameNew
-
-
-viewModelFromRoute : Route -> ( ViewModel, Cmd Msg )
-viewModelFromRoute route =
+viewModelFromRoute : String -> Route -> ( ViewModel, Cmd Msg )
+viewModelFromRoute baseUrl route =
     case route of
         Lobby ->
             let
                 ( lobbyModel, lobbyCmd ) =
-                    Lobby.init
+                    Lobby.init baseUrl
             in
                 ViewLobby lobbyModel ! [ Cmd.map LobbyMsg lobbyCmd ]
 
