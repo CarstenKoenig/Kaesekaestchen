@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE TypeOperators   #-}
 {-# LANGUAGE DeriveGeneric   #-}
@@ -26,9 +27,10 @@ import           Elm (ElmType(..))
 import qualified Elm
 import           Network.Wai
 import           Network.Wai.Handler.Warp
+import           Network.Wai.Middleware.Cors (cors, simpleCorsResourcePolicy, CorsResourcePolicy(..))
+import           Network.Wai.Middleware.Servant.Options (provideOptions)
 import           Servant
 import           Servant.Elm (Proxy(Proxy))
-
 import           Game
 
 
@@ -39,10 +41,16 @@ type API =
   :<|> "api" :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameState)
 
 
-startApp :: IO ()
+startApp :: IO () 
 startApp = do
   storage <- MVar.newMVar Map.empty
-  run 8080 $ app storage
+  run 8080
+    $ cors (const $ Just policy)
+    $ provideOptions (Proxy :: Proxy API)
+    $ app storage
+  where
+  policy = simpleCorsResourcePolicy
+           { corsRequestHeaders = [ "content-type" ] }  
 
 
 app :: MVar AppState -> Application

@@ -7,6 +7,7 @@ module ElmExport
 
 import           Data.Aeson (encode)
 import           Data.ByteString.Lazy (ByteString)
+import           Data.Text (Text)
 import           Elm (Spec(Spec))
 import qualified Elm
 import           Servant.Elm (Proxy(Proxy))
@@ -21,21 +22,24 @@ toJson :: GameState -> ByteString
 toJson = encode
 
 
-writeElmFile :: FilePath -> IO ()
-writeElmFile = Elm.specsToDir [spec]
+writeElmFile :: Text -> FilePath -> IO ()
+writeElmFile baseUrl = Elm.specsToDir [spec baseUrl]
 
 
-spec :: Spec
-spec = Spec
+spec :: Text -> Spec
+spec baseUrl = Spec
   ["Api", "Game"]
   ( Elm.defElmImports
-  : Elm.generateElmForAPI  (Proxy :: Proxy API)
+  : "import Exts.Json.Encode"
+  : Elm.generateElmForAPIWith
+    (Elm.defElmOptions { Elm.urlPrefix = Elm.Static baseUrl })
+    (Proxy :: Proxy API)
   ++
   [ Elm.toElmTypeSource    (Proxy :: Proxy Player)
   , Elm.toElmDecoderSource (Proxy :: Proxy Player)
   , Elm.toElmTypeSource    (Proxy :: Proxy SegCoord)
   , Elm.toElmDecoderSource (Proxy :: Proxy SegCoord)
-  , Elm.toElmDecoderSource (Proxy :: Proxy SegCoord)
+  , Elm.toElmEncoderSource (Proxy :: Proxy SegCoord)
   , Elm.toElmTypeSource    (Proxy :: Proxy GameState)
   , Elm.toElmDecoderSource (Proxy :: Proxy GameState)
   ])

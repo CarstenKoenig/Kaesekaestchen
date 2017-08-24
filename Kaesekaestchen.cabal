@@ -25,11 +25,13 @@ library
                      , elm-export
                      , mtl
                      , servant-elm
+                     , servant-options                     
                      , servant-server
                      , transformers
                      , text
                      , uuid
                      , wai
+                     , wai-cors
                      , warp
   default-language:    Haskell2010
   ghc-options:       -Wall

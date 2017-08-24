@@ -7,6 +7,8 @@ import Http
 import String
 
 
+import Exts.Json.Encode
+
 getApiGames : Http.Request (List (String))
 getApiGames =
     Http.request
@@ -16,7 +18,7 @@ getApiGames =
             []
         , url =
             String.join "/"
-                [ ""
+                [ "http://localhost:8080"
                 , "api"
                 , "games"
                 ]
@@ -39,7 +41,7 @@ postApiGameNew =
             []
         , url =
             String.join "/"
-                [ ""
+                [ "http://localhost:8080"
                 , "api"
                 , "game"
                 , "new"
@@ -63,7 +65,7 @@ getApiGameByGameId capture_gameId =
             []
         , url =
             String.join "/"
-                [ ""
+                [ "http://localhost:8080"
                 , "api"
                 , "game"
                 , capture_gameId |> Http.encodeUri
@@ -87,7 +89,7 @@ postApiGameByGameIdMove capture_gameId body =
             []
         , url =
             String.join "/"
-                [ ""
+                [ "http://localhost:8080"
                 , "api"
                 , "game"
                 , capture_gameId |> Http.encodeUri
@@ -125,12 +127,17 @@ decodeSegCoord =
         else if x == "VCoord" then decode VCoord |> required "contents" (map2 (,) (index 0 int) (index 1 int))
         else fail "Constructor not matched" )
 
-decodeSegCoord : Decoder SegCoord
-decodeSegCoord =
-    field "tag" string |> andThen ( \x ->
-        if x == "HCoord" then decode HCoord |> required "contents" (map2 (,) (index 0 int) (index 1 int))
-        else if x == "VCoord" then decode VCoord |> required "contents" (map2 (,) (index 0 int) (index 1 int))
-        else fail "Constructor not matched" )
+encodeSegCoord : SegCoord -> Json.Encode.Value
+encodeSegCoord x =
+    case x of
+        HCoord y0 -> Json.Encode.object
+            [ ( "tag", Json.Encode.string "HCoord" )
+            , ( "contents", (Exts.Json.Encode.tuple2 Json.Encode.int Json.Encode.int) y0 )
+            ]
+        VCoord y0 -> Json.Encode.object
+            [ ( "tag", Json.Encode.string "VCoord" )
+            , ( "contents", (Exts.Json.Encode.tuple2 Json.Encode.int Json.Encode.int) y0 )
+            ]
 
 type alias GameState =
     { movesMade : List ((Player, SegCoord))
