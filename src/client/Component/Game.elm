@@ -189,14 +189,14 @@ drawSegment model coord =
         HCoord ( x, y ) ->
             drawSegmentSvg model
                 coord
-                2
+                1
                 ( 10 * toFloat x, 10 * toFloat y )
                 ( 10 * toFloat (x + 1), 10 * toFloat y )
 
         VCoord ( x, y ) ->
             drawSegmentSvg model
                 coord
-                2
+                1
                 ( 10 * toFloat x, 10 * toFloat y )
                 ( 10 * toFloat x, 10 * toFloat (y + 1) )
 
