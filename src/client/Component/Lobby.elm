@@ -25,6 +25,11 @@ type Msg
     | StartNewGameResult (Result Http.Error GameId)
 
 
+defaultDim : Int
+defaultDim =
+    8
+
+
 init : String -> ( Model, Cmd Msg )
 init baseUrl =
     { runningGames = []
@@ -63,7 +68,7 @@ update msg model =
             model ! [ Nav.newUrl (routeToUrl model.baseUrl <| PlayGame gameId) ]
 
         StartNewGame ->
-            model ! [ startNewGame ]
+            model ! [ startNewGame defaultDim ]
 
         StartNewGameResult (Err error) ->
             -- TODO show error / move away
@@ -118,6 +123,6 @@ loadGames =
     Http.send LoadGamesResult Api.getApiGames
 
 
-startNewGame : Cmd Msg
-startNewGame =
-    Http.send StartNewGameResult Api.postApiGameNew
+startNewGame : Int -> Cmd Msg
+startNewGame dim =
+    Http.send StartNewGameResult (Api.postApiGameNewByDim dim)

@@ -178,6 +178,6 @@ viewModelFromRoute baseUrl route =
         PlayGame gameId ->
             let
                 ( gameModel, gameCmd ) =
-                    Game.init gameId
+                    Game.init 0 gameId
             in
                 ViewGame gameModel ! [ Cmd.map GameMsg gameCmd ]

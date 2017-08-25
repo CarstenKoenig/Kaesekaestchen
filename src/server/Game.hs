@@ -3,6 +3,7 @@
 module Game
   ( Player (..)
   , Coord
+  , SegmentFill (..)
   , SegCoord (..)
   , GameState (..)
   , calculateGameState
@@ -20,7 +21,8 @@ import           Elm (ElmType(..))
 
 data GameState =
   GameState
-  { movesMade :: [ (Player, SegCoord) ]
+  { dimension :: Int
+  , filledSegments :: [ (SegmentFill, SegCoord) ]
   , wonCells :: [ (Player, Coord) ]
   , playersTurn :: Player
   } deriving (Show, Eq, Generic)
@@ -33,11 +35,21 @@ data Player
   = Blue | Red
   deriving (Show, Eq, Ord, Enum, Generic)
 
+
 instance ElmType Player
 instance ToJSON Player
 instance FromJSON Player
-  
 
+
+data SegmentFill
+  = Wall
+  | Color Player
+  deriving (Show, Eq, Ord, Generic)
+
+instance ElmType SegmentFill
+instance ToJSON SegmentFill
+
+  
 data SegCoord
   = HCoord Coord
   | VCoord Coord
@@ -51,11 +63,11 @@ instance FromJSON SegCoord
 type Coord = (Int, Int)
 
 
-newGame :: GameState
-newGame = calculateGameState []
+newGame :: Int -> GameState
+newGame dim = calculateGameState dim []
 
 
-calculateGameState :: [SegCoord] -> GameState
+calculateGameState :: Int -> [SegCoord] -> GameState
 calculateGameState = foldMoves
 
 
@@ -63,16 +75,18 @@ calculateGameState = foldMoves
 -- manage player moves / generate state
 
 
-foldMoves :: [SegCoord] -> GameState
-foldMoves coords =
+foldMoves :: Int -> [SegCoord] -> GameState
+foldMoves dim coords =
   let (next, moves, cells) =
-        foldl' doMove (Blue, [], Map.empty) coords
-  in GameState (reverse moves) (getWonCells cells) next
+        foldl' doMove (Blue, walls, startCells) coords
+  in GameState dim (reverse moves) (getWonCells cells) next
         
   where
+    walls = generateWalls dim
+    startCells = foldl' (flip $ placeSegment Nothing) Map.empty $ map snd walls
     doMove (player, moves, cells) sCoord =
-      let cells' = placeSegment player sCoord cells
-          moves' = (player, sCoord) : moves
+      let cells' = placeSegment (Just player) sCoord cells
+          moves' = (Color player, sCoord) : moves
           wonCell = any (filled cells cells') $ getCoords sCoord
           next = nextPlayer wonCell player
       in (next, moves', cells')
@@ -91,6 +105,14 @@ foldMoves coords =
       fromMaybe emptyCell $ Map.lookup coord cells
 
 
+generateWalls :: Int -> [(SegmentFill, SegCoord)]
+generateWalls dim =
+  [ (Wall, VCoord (0,y)) | y <- [0..dim-1] ]
+  ++ [ (Wall, VCoord (dim,y)) | y <- [0..dim-1] ]
+  ++ [ (Wall, HCoord (x,0)) | x <- [0..dim-1] ]
+  ++ [ (Wall, HCoord (x,dim)) | x <- [0..dim-1] ]
+  
+
 type Cells = Map Coord CellState
 
 
@@ -103,7 +125,7 @@ won :: CellState -> Bool
 won (CellState l t r b _) = and [l, t, r, b]
 
 
-placeSegment :: Player -> SegCoord -> Cells -> Cells
+placeSegment :: Maybe Player -> SegCoord -> Cells -> Cells
 placeSegment player (HCoord coord@(x,y)) cells =
   Map.alter (setBot player) (x,y-1) 
   . Map.alter (setTop player) coord
@@ -114,35 +136,35 @@ placeSegment player (VCoord coord@(x,y)) cells =
   $ cells
 
 
-setTop :: Player -> Maybe CellState -> Maybe CellState
+setTop :: Maybe Player -> Maybe CellState -> Maybe CellState
 setTop player cell =
   let cell' = fromMaybe emptyCell cell
   in Just $ cell' { topBorder = True
-                  , filledBy = Just player
+                  , filledBy = player
                   }
 
 
-setBot :: Player -> Maybe CellState -> Maybe CellState
+setBot :: Maybe Player -> Maybe CellState -> Maybe CellState
 setBot player cell =
   let cell' = fromMaybe emptyCell cell
   in Just $ cell' { bottomBorder = True
-                  , filledBy = Just player
+                  , filledBy = player
                   }
   
 
-setLeft :: Player -> Maybe CellState -> Maybe CellState
+setLeft :: Maybe Player -> Maybe CellState -> Maybe CellState
 setLeft player cell =
   let cell' = fromMaybe emptyCell cell
   in Just $ cell' { leftBorder = True
-                  , filledBy = Just player
+                  , filledBy = player
                   }
 
 
-setRight :: Player -> Maybe CellState -> Maybe CellState
+setRight :: Maybe Player -> Maybe CellState -> Maybe CellState
 setRight player cell =
   let cell' = fromMaybe emptyCell cell
   in Just $ cell' { rightBorder = True
-                  , filledBy = Just player
+                  , filledBy = player
                   }
 
 

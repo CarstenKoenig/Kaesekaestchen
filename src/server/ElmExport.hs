@@ -40,6 +40,8 @@ spec baseUrl = Spec
   , Elm.toElmTypeSource    (Proxy :: Proxy SegCoord)
   , Elm.toElmDecoderSource (Proxy :: Proxy SegCoord)
   , Elm.toElmEncoderSource (Proxy :: Proxy SegCoord)
+  , Elm.toElmTypeSource    (Proxy :: Proxy SegmentFill)
+  , Elm.toElmDecoderSource (Proxy :: Proxy SegmentFill)
   , Elm.toElmTypeSource    (Proxy :: Proxy GameState)
   , Elm.toElmDecoderSource (Proxy :: Proxy GameState)
   ])

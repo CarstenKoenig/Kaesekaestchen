@@ -8,7 +8,7 @@ import Svg.Events as SEv
 import Svg.Keyed as SKeyed
 import Dict exposing (Dict)
 import Http
-import Api.Game as Api exposing (Player(..), SegCoord(..), GameState)
+import Api.Game as Api exposing (Player(..), SegCoord(..), SegmentFill(..), GameState)
 
 
 type alias GameId =
@@ -17,9 +17,10 @@ type alias GameId =
 
 type alias Model =
     { gameId : GameId
+    , dimension : Int
     , player : Player
     , hoverOver : Maybe SegCoord
-    , takenSegments : Dict SegCoordComp Player
+    , takenSegments : Dict SegCoordComp SegmentFill
     , wonCells : Dict Coord Player
     , loading : Bool
     , error : Maybe String
@@ -43,9 +44,10 @@ type alias SegCoordComp =
     ( Char, Int, Int )
 
 
-init : GameId -> ( Model, Cmd Msg )
-init gameId =
+init : Int -> GameId -> ( Model, Cmd Msg )
+init dim gameId =
     { gameId = gameId
+    , dimension = dim
     , player = Blue
     , hoverOver = Nothing
     , takenSegments = Dict.empty
@@ -112,14 +114,18 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    Svg.svg
-        [ SAttr.viewBox "-5 -5 110 110"
-        ]
-        (List.concat
-            [ fillGrid model
-            , drawGrid model
+    let
+        width =
+            model.dimension * 10 + 10
+    in
+        Svg.svg
+            [ SAttr.viewBox <| "-5 -5 " ++ toString width ++ " " ++ toString width
             ]
-        )
+            (List.concat
+                [ fillGrid model
+                , drawGrid model
+                ]
+            )
 
 
 
@@ -135,8 +141,9 @@ setGameState model state =
         Just newState ->
             { model
                 | player = newState.playersTurn
+                , dimension = newState.dimension
                 , takenSegments =
-                    newState.movesMade
+                    newState.filledSegments
                         |> List.map (\( p, sc ) -> ( toComp sc, p ))
                         |> Dict.fromList
                 , wonCells =
@@ -158,29 +165,29 @@ makeMove gameId coord =
 
 fillGrid : Model -> List (Svg Msg)
 fillGrid model =
-    List.concatMap (fillRow model) (List.range 0 9)
+    List.concatMap (fillRow model) (List.range 0 (model.dimension - 1))
 
 
 drawGrid : Model -> List (Svg Msg)
 drawGrid model =
     List.concatMap
         (\i -> List.append (drawHLine model i) (drawVLine model i))
-        (List.range 0 10)
+        (List.range 0 model.dimension)
 
 
 fillRow : Model -> Int -> List (Svg Msg)
 fillRow model y =
-    List.map (\x -> fillRect model ( x, y )) (List.range 0 9)
+    List.map (\x -> fillRect model ( x, y )) (List.range 0 (model.dimension - 1))
 
 
 drawHLine : Model -> Int -> List (Svg Msg)
 drawHLine model y =
-    List.map (\x -> drawSegment model (HCoord ( x, y ))) (List.range 0 9)
+    List.map (\x -> drawSegment model (HCoord ( x, y ))) (List.range 0 (model.dimension - 1))
 
 
 drawVLine : Model -> Int -> List (Svg Msg)
 drawVLine model x =
-    List.map (\y -> drawSegment model (VCoord ( x, y ))) (List.range 0 9)
+    List.map (\y -> drawSegment model (VCoord ( x, y ))) (List.range 0 (model.dimension - 1))
 
 
 drawSegment : Model -> SegCoord -> Svg Msg
@@ -257,7 +264,7 @@ drawSegmentSvg model coord strokeWidth ( x0, y0 ) ( x1, y1 ) =
 
         color =
             Dict.get (toComp coord) model.takenSegments
-                |> Maybe.map playerKey
+                |> Maybe.map segmentFillKey
                 |> Maybe.withDefault
                     (if model.hoverOver == Just coord then
                         playerKey model.player
@@ -298,9 +305,19 @@ toComp coord =
             ( 'H', x, y )
 
 
+segmentFillKey : SegmentFill -> String
+segmentFillKey seg =
+    case seg of
+        Color pl ->
+            playerKey pl
+
+        Wall ->
+            "grey"
+
+
 playerKey : Player -> String
-playerKey player =
-    case player of
+playerKey pl =
+    case pl of
         Red ->
             "red"
 
