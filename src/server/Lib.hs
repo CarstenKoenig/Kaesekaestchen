@@ -20,6 +20,7 @@ import           Data.Aeson (ToJSON(..), FromJSON)
 import qualified Data.Aeson as Aeson
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import           Data.Text as T
 import           Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
@@ -36,8 +37,8 @@ import           Game
 
 type API =
   "api" :> "games" :> Get '[JSON] [GameId]
-  :<|> "api" :> "game" :> "new" :> Post '[JSON] GameId
   :<|> "api" :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameState)
+  :<|> "api" :> "game" :> "new" :> Post '[JSON] GameId
   :<|> "api" :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameState)
 
 
@@ -64,8 +65,8 @@ app storage =
 server :: ServerT API StateHandler
 server =
   getGameList
-  :<|> startGame
   :<|> getGame
+  :<|> startGame
   :<|> applyMove
 
 
@@ -149,5 +150,5 @@ instance FromHttpApiData GameId where
   parseUrlPiece piece = do
     s <- parseUrlPiece piece
     case UUID.fromString s of
-      Nothing -> fail $ "no valid UUID-piece " ++ show piece
+      Nothing -> Left . T.pack $ "no valid UUID-piece " ++ show piece
       Just uid -> return $ GameId uid
