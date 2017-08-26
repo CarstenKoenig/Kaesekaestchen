@@ -8,6 +8,7 @@ import Svg.Events as SEv
 import Svg.Keyed as SKeyed
 import Dict exposing (Dict)
 import Http
+import Flags exposing (Flags)
 import Api.Game as Api exposing (Player(..), SegCoord(..), SegmentFill(..), GameState)
 
 
@@ -16,7 +17,8 @@ type alias GameId =
 
 
 type alias Model =
-    { gameId : GameId
+    { flags : Flags
+    , gameId : GameId
     , dimension : Int
     , player : Player
     , hoverOver : Maybe SegCoord
@@ -44,9 +46,10 @@ type alias SegCoordComp =
     ( Char, Int, Int )
 
 
-init : Int -> GameId -> ( Model, Cmd Msg )
-init dim gameId =
-    { gameId = gameId
+init : Flags -> Int -> GameId -> ( Model, Cmd Msg )
+init flags dim gameId =
+    { flags = flags
+    , gameId = gameId
     , dimension = dim
     , player = Blue
     , hoverOver = Nothing
@@ -55,7 +58,7 @@ init dim gameId =
     , error = Nothing
     , loading = True
     }
-        ! [ loadGame gameId ]
+        ! [ loadGame flags.apiUrl gameId ]
 
 
 subscriptions : Model -> Sub Msg
@@ -79,7 +82,7 @@ update msg model =
             { model
                 | loading = True
             }
-                ! [ makeMove model.gameId coord ]
+                ! [ makeMove model.flags.apiUrl model.gameId coord ]
 
         LoadGameResult (Err error) ->
             -- TODO show error / move away
@@ -153,14 +156,14 @@ setGameState model state =
             }
 
 
-loadGame : GameId -> Cmd Msg
-loadGame gameId =
-    Http.send LoadGameResult (Api.getApiGameByGameId gameId)
+loadGame : String -> GameId -> Cmd Msg
+loadGame apiUrl gameId =
+    Http.send LoadGameResult (Api.getApiGameByGameId apiUrl gameId)
 
 
-makeMove : GameId -> SegCoord -> Cmd Msg
-makeMove gameId coord =
-    Http.send MakeMoveResult (Api.postApiGameByGameIdMove gameId coord)
+makeMove : String -> GameId -> SegCoord -> Cmd Msg
+makeMove apiUrl gameId coord =
+    Http.send MakeMoveResult (Api.postApiGameByGameIdMove apiUrl gameId coord)
 
 
 fillGrid : Model -> List (Svg Msg)

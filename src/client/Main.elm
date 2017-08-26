@@ -47,7 +47,7 @@ init flags location =
         Nothing ->
             let
                 ( lobbyModel, lobbyCmd ) =
-                    Lobby.init flags.baseUrl
+                    Lobby.init flags
             in
                 Model Lobby (ViewLobby lobbyModel) Nothing flags
                     ! [ Nav.modifyUrl <| routeToUrl flags.baseUrl Lobby, Cmd.map LobbyMsg lobbyCmd ]
@@ -55,7 +55,7 @@ init flags location =
         Just route ->
             let
                 ( viewModel, initCmd ) =
-                    viewModelFromRoute flags.baseUrl route
+                    viewModelFromRoute flags route
             in
                 Model route viewModel Nothing flags
                     ! [ initCmd ]
@@ -165,19 +165,19 @@ handleLocationChanged model =
     init model.flags
 
 
-viewModelFromRoute : String -> Route -> ( ViewModel, Cmd Msg )
-viewModelFromRoute baseUrl route =
+viewModelFromRoute : Flags -> Route -> ( ViewModel, Cmd Msg )
+viewModelFromRoute flags route =
     case route of
         Lobby ->
             let
                 ( lobbyModel, lobbyCmd ) =
-                    Lobby.init baseUrl
+                    Lobby.init flags
             in
                 ViewLobby lobbyModel ! [ Cmd.map LobbyMsg lobbyCmd ]
 
         PlayGame gameId ->
             let
                 ( gameModel, gameCmd ) =
-                    Game.init 0 gameId
+                    Game.init flags 0 gameId
             in
                 ViewGame gameModel ! [ Cmd.map GameMsg gameCmd ]

@@ -5,6 +5,7 @@ import Html.Attributes as Attr
 import Html.Events as Ev
 import Http
 import Navigation as Nav
+import Flags exposing (Flags)
 import Routing exposing (..)
 import Api.Game as Api exposing (Player(..), SegCoord(..), GameState)
 import Component.Game exposing (GameId)
@@ -13,7 +14,7 @@ import Component.Game exposing (GameId)
 type alias Model =
     { runningGames : List GameId
     , error : Maybe String
-    , baseUrl : String
+    , flags : Flags
     }
 
 
@@ -30,13 +31,13 @@ defaultDim =
     8
 
 
-init : String -> ( Model, Cmd Msg )
-init baseUrl =
+init : Flags -> ( Model, Cmd Msg )
+init flags =
     { runningGames = []
     , error = Nothing
-    , baseUrl = baseUrl
+    , flags = flags
     }
-        ! [ loadGames ]
+        ! [ loadGames flags.apiUrl ]
 
 
 subscriptions : Model -> Sub Msg
@@ -52,7 +53,7 @@ update msg model =
                 | runningGames = []
                 , error = Nothing
             }
-                ! [ loadGames ]
+                ! [ loadGames model.flags.apiUrl ]
 
         LoadGamesResult (Err error) ->
             -- TODO show error / move away
@@ -65,10 +66,10 @@ update msg model =
             { model | runningGames = games } ! []
 
         VisitGame gameId ->
-            model ! [ Nav.newUrl (routeToUrl model.baseUrl <| PlayGame gameId) ]
+            model ! [ Nav.newUrl (routeToUrl model.flags.baseUrl <| PlayGame gameId) ]
 
         StartNewGame ->
-            model ! [ startNewGame defaultDim ]
+            model ! [ startNewGame model.flags.apiUrl defaultDim ]
 
         StartNewGameResult (Err error) ->
             -- TODO show error / move away
@@ -78,7 +79,7 @@ update msg model =
                 ! []
 
         StartNewGameResult (Ok gameId) ->
-            model ! [ Nav.newUrl (routeToUrl model.baseUrl <| PlayGame gameId) ]
+            model ! [ Nav.newUrl (routeToUrl model.flags.baseUrl <| PlayGame gameId) ]
 
 
 view : Model -> Html Msg
@@ -118,11 +119,11 @@ viewGame gameId =
         [ Html.text gameId ]
 
 
-loadGames : Cmd Msg
-loadGames =
-    Http.send LoadGamesResult Api.getApiGames
+loadGames : String -> Cmd Msg
+loadGames apiUrl =
+    Http.send LoadGamesResult (Api.getApiGames apiUrl)
 
 
-startNewGame : Int -> Cmd Msg
-startNewGame dim =
-    Http.send StartNewGameResult (Api.postApiGameNewByDim dim)
+startNewGame : String -> Int -> Cmd Msg
+startNewGame apiUrl dim =
+    Http.send StartNewGameResult (Api.postApiGameNewByDim apiUrl dim)
