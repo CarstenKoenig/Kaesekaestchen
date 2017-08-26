@@ -32,7 +32,7 @@ getApiGames urlBase =
             False
         }
 
-getApiGameByGameId : String -> String -> Http.Request (Maybe (GameState))
+getApiGameByGameId : String -> String -> Http.Request (Maybe (GameResponse))
 getApiGameByGameId urlBase capture_gameId =
     Http.request
         { method =
@@ -49,7 +49,7 @@ getApiGameByGameId urlBase capture_gameId =
         , body =
             Http.emptyBody
         , expect =
-            Http.expectJson (nullable decodeGameState)
+            Http.expectJson (nullable decodeGameResponse)
         , timeout =
             Nothing
         , withCredentials =
@@ -81,7 +81,7 @@ postApiGameNewByDim urlBase capture_dim =
             False
         }
 
-postApiGameByGameIdMove : String -> String -> SegCoord -> Http.Request (Maybe (GameState))
+postApiGameByGameIdMove : String -> String -> SegCoord -> Http.Request (Maybe (GameResponse))
 postApiGameByGameIdMove urlBase capture_gameId body =
     Http.request
         { method =
@@ -99,7 +99,7 @@ postApiGameByGameIdMove urlBase capture_gameId body =
         , body =
             Http.jsonBody (encodeSegCoord body)
         , expect =
-            Http.expectJson (nullable decodeGameState)
+            Http.expectJson (nullable decodeGameResponse)
         , timeout =
             Nothing
         , withCredentials =
@@ -165,3 +165,14 @@ decodeGameState =
         |> required "filledSegments" (list (map2 (,) (index 0 decodeSegmentFill) (index 1 decodeSegCoord)))
         |> required "wonCells" (list (map2 (,) (index 0 decodePlayer) (index 1 (map2 (,) (index 0 int) (index 1 int)))))
         |> required "playersTurn" decodePlayer
+
+type alias GameResponse =
+    { gameState : GameState
+    , yourMove : Bool
+    }
+
+decodeGameResponse : Decoder GameResponse
+decodeGameResponse =
+    decode GameResponse
+        |> required "gameState" decodeGameState
+        |> required "yourMove" bool

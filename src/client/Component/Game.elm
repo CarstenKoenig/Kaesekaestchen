@@ -9,7 +9,7 @@ import Svg.Keyed as SKeyed
 import Dict exposing (Dict)
 import Http
 import Flags exposing (Flags)
-import Api.Game as Api exposing (Player(..), SegCoord(..), SegmentFill(..), GameState)
+import Api.Game as Api exposing (Player(..), SegCoord(..), SegmentFill(..), GameState, GameResponse)
 
 
 type alias GameId =
@@ -24,6 +24,7 @@ type alias Model =
     , hoverOver : Maybe SegCoord
     , takenSegments : Dict SegCoordComp SegmentFill
     , wonCells : Dict Coord Player
+    , myTurn : Bool
     , loading : Bool
     , error : Maybe String
     }
@@ -34,8 +35,8 @@ type Msg
     | HoverIn SegCoord
     | HoverOut
     | ClickSeq SegCoord
-    | LoadGameResult (Result Http.Error (Maybe GameState))
-    | MakeMoveResult (Result Http.Error (Maybe GameState))
+    | LoadGameResult (Result Http.Error (Maybe GameResponse))
+    | MakeMoveResult (Result Http.Error (Maybe GameResponse))
 
 
 type alias Coord =
@@ -55,6 +56,7 @@ init flags dim gameId =
     , hoverOver = Nothing
     , takenSegments = Dict.empty
     , wonCells = Dict.empty
+    , myTurn = False
     , error = Nothing
     , loading = True
     }
@@ -73,21 +75,28 @@ update msg model =
             model ! []
 
         HoverIn coord ->
-            { model | hoverOver = Just coord } ! []
+            if model.myTurn then
+                { model | hoverOver = Just coord } ! []
+            else
+                { model | hoverOver = Nothing } ! []
 
         HoverOut ->
             { model | hoverOver = Nothing } ! []
 
         ClickSeq coord ->
-            { model
-                | loading = True
-            }
-                ! [ makeMove model.flags.apiUrl model.gameId coord ]
+            if model.myTurn then
+                { model
+                    | loading = True
+                }
+                    ! [ makeMove model.flags.apiUrl model.gameId coord ]
+            else
+                model ! []
 
         LoadGameResult (Err error) ->
             -- TODO show error / move away
             { model
                 | loading = False
+                , myTurn = False
                 , error = Just (toString error)
             }
                 ! []
@@ -103,6 +112,7 @@ update msg model =
             -- TODO show error / move away
             { model
                 | loading = False
+                , myTurn = False
                 , error = Just (toString error)
             }
                 ! []
@@ -135,22 +145,23 @@ view model =
 ---------------------------------------------------------------------------------------------------------------
 
 
-setGameState : Model -> Maybe GameState -> Model
-setGameState model state =
-    case state of
+setGameState : Model -> Maybe GameResponse -> Model
+setGameState model response =
+    case response of
         Nothing ->
             model
 
-        Just newState ->
+        Just newResponse ->
             { model
-                | player = newState.playersTurn
-                , dimension = newState.dimension
+                | player = newResponse.gameState.playersTurn
+                , dimension = newResponse.gameState.dimension
+                , myTurn = newResponse.yourMove
                 , takenSegments =
-                    newState.filledSegments
+                    newResponse.gameState.filledSegments
                         |> List.map (\( p, sc ) -> ( toComp sc, p ))
                         |> Dict.fromList
                 , wonCells =
-                    newState.wonCells
+                    newResponse.gameState.wonCells
                         |> List.map (\( p, c ) -> ( c, p ))
                         |> Dict.fromList
             }
@@ -275,24 +286,26 @@ drawSegmentSvg model coord strokeWidth ( x0, y0 ) ( x1, y1 ) =
                         "lightgrey"
                     )
 
-        ( hoverIn, onClick, hoverOut ) =
-            if Dict.member (toComp coord) model.takenSegments then
-                ( NoOp, NoOp, NoOp )
+        attributes =
+            if not model.myTurn || Dict.member (toComp coord) model.takenSegments then
+                []
             else
-                ( HoverIn coord, ClickSeq coord, HoverOut )
+                [ SEv.onMouseOver (HoverIn coord)
+                , SEv.onClick (ClickSeq coord)
+                , SEv.onMouseOut HoverOut
+                ]
     in
         SKeyed.node "g"
             []
             [ ( "S_" ++ toString x ++ "_" ++ toString y
               , Svg.polygon
-                    [ SAttr.fill color
-                    , SAttr.strokeWidth "0.5"
-                    , SAttr.stroke "white"
-                    , SAttr.points (String.join " " (List.map showCoord pts))
-                    , SEv.onMouseOver hoverIn
-                    , SEv.onMouseOut hoverOut
-                    , SEv.onClick onClick
-                    ]
+                    ([ SAttr.fill color
+                     , SAttr.strokeWidth "0.5"
+                     , SAttr.stroke "white"
+                     , SAttr.points (String.join " " (List.map showCoord pts))
+                     ]
+                        ++ attributes
+                    )
                     []
               )
             ]

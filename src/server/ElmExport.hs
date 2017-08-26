@@ -43,4 +43,6 @@ spec = Spec
   , Elm.toElmDecoderSource (Proxy :: Proxy SegmentFill)
   , Elm.toElmTypeSource    (Proxy :: Proxy GameState)
   , Elm.toElmDecoderSource (Proxy :: Proxy GameState)
+  , Elm.toElmTypeSource    (Proxy :: Proxy GameResponse)
+  , Elm.toElmDecoderSource (Proxy :: Proxy GameResponse)
   ])

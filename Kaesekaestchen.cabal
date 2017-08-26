@@ -24,6 +24,7 @@ library
                      , containers
                      , elm-export
                      , mtl
+                     , network
                      , servant-elm
                      , servant-options                     
                      , servant-server

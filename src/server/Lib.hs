@@ -5,6 +5,7 @@
 
 module Lib
     ( GameId (..)
+    , GameResponse (..)
     , API
     , startApp
     , app
@@ -26,6 +27,7 @@ import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import           Elm (ElmType(..))
 import qualified Elm
+import           Network.Socket (SockAddr)
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors (cors, simpleCorsResourcePolicy, CorsResourcePolicy(..))
@@ -37,9 +39,9 @@ import           Game
 
 type API =
   "api" :> "games" :> Get '[JSON] [GameId]
-  :<|> "api" :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameState)
-  :<|> "api" :> "game" :> "new" :> Capture "dim" Int :> Post '[JSON] GameId
-  :<|> "api" :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameState)
+  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameResponse)
+  :<|> "api" :> RemoteHost :> "game" :> "new" :> Capture "dim" Int :> Post '[JSON] GameId
+  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameResponse)
 
 
 startApp :: IO () 
@@ -75,31 +77,38 @@ getGameList =
   State.gets (fmap GameId . Map.keys)
 
 
-getGame :: GameId -> StateHandler (Maybe GameState)
-getGame (GameId uid) = do
+getGame :: SockAddr -> GameId -> StateHandler (Maybe GameResponse)
+getGame sender (GameId uid) = do
   game <- State.gets (Map.lookup uid) 
-  return $ fmap (\ g -> calculateGameState (gameDimension g) (gameMoves g)) game
+  return $ fmap (generateResponse sender) game
 
 
-startGame :: Int -> StateHandler GameId
-startGame dim = do
+startGame :: SockAddr -> Int -> StateHandler GameId
+startGame sender dim = do
   uid <- liftIO UUID.nextRandom
-  State.modify (Map.insert uid (Game dim []))
+  State.modify (Map.insert uid (Game dim [] sender Nothing))
   return $ GameId uid
 
 
-applyMove :: GameId -> SegCoord -> StateHandler (Maybe GameState)
-applyMove (GameId uid) atCoord = do
+applyMove :: SockAddr -> GameId -> SegCoord -> StateHandler (Maybe GameResponse)
+applyMove sender (GameId uid) atCoord = do
   foundGame <- State.gets (Map.lookup uid)
   case foundGame of
     Nothing -> return Nothing
     Just game -> do
-      let moves' = gameMoves game ++ [atCoord]
-      State.modify (Map.insert uid (game { gameMoves = moves' }))
-      return . Just $ calculateGameState (gameDimension game) moves'
+      let resp = generateResponse sender game
+      if yourMove resp
+        then do
+          let moves' = gameMoves game ++ [atCoord]
+          State.modify (Map.insert uid (game { gameMoves = moves' }))
+          let state' = calculateGameState (gameDimension game) moves'
+              turn' = isPlayersTurn sender game state'
+          return . Just $ GameResponse state' turn'
+        else
+          throwError (err500 { errBody = "not your turn sorry" } :: ServantErr)
 
 
-type StateHandler = StateT AppState IO
+type StateHandler = StateT AppState Handler
 
 
 type AppState = Map UUID Game
@@ -107,16 +116,42 @@ type AppState = Map UUID Game
 data Game = Game
   { gameDimension :: Int
   , gameMoves :: [SegCoord]
+  , bluePlayer :: SockAddr
+  , redPlayer :: Maybe SockAddr
   }
 
 
-stateToHandler :: MVar AppState -> StateT AppState IO :~> Handler
+data GameResponse = GameResponse
+  { gameState :: GameState
+  , yourMove  :: Bool
+  } deriving (Eq, Show, Generic)
+
+instance ElmType GameResponse
+instance ToJSON GameResponse
+
+
+generateResponse :: SockAddr -> Game -> GameResponse
+generateResponse sender game =
+  let state = calculateGameState (gameDimension game) (gameMoves game)
+      turn = isPlayersTurn sender game state
+  in GameResponse state turn
+
+
+isPlayersTurn :: SockAddr -> Game -> GameState -> Bool
+isPlayersTurn sender game state =
+  case playersTurn state of
+    Blue -> bluePlayer game == sender
+    Red  -> redPlayer game  == Just sender
+
+
+stateToHandler :: MVar AppState -> StateT AppState Handler :~> Handler
 stateToHandler storage = NT stateToHandler'
   where
-    stateToHandler' comp = liftIO $ do
-      state <- MVar.takeMVar storage
+    stateToHandler' :: StateT AppState Handler res -> Handler res
+    stateToHandler' comp = do
+      state <- liftIO $ MVar.takeMVar storage
       (res, state') <- State.runStateT comp state
-      MVar.putMVar storage state'
+      liftIO $ MVar.putMVar storage state'
       return res
 
 
