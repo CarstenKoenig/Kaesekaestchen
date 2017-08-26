@@ -6,8 +6,8 @@ import Component.Game as Game exposing (GameId)
 
 
 type Route
-    = Lobby
-    | PlayGame GameId
+    = LobbyR
+    | ShowGameR GameId
 
 
 locationToRoute : String -> Location -> Maybe Route
@@ -18,16 +18,16 @@ locationToRoute baseUrl =
 routeToUrl : String -> Route -> String
 routeToUrl baseUrl route =
     case route of
-        Lobby ->
+        LobbyR ->
             baseUrl
 
-        PlayGame gameId ->
+        ShowGameR gameId ->
             baseUrl ++ "/game/" ++ gameId
 
 
 routeParser : String -> Parser (Route -> a) a
 routeParser baseUrl =
     Url.oneOf
-        [ Url.map Lobby (Url.s baseUrl)
-        , Url.map PlayGame (Url.s baseUrl </> Url.s "game" </> Url.string)
+        [ Url.map LobbyR (Url.s baseUrl)
+        , Url.map ShowGameR (Url.s baseUrl </> Url.s "game" </> Url.string)
         ]

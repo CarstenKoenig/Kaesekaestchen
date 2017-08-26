@@ -12,8 +12,8 @@ module Lib
     ) where
 
 import           GHC.Generics (Generic)
-import           Control.Concurrent.MVar (MVar)
-import qualified Control.Concurrent.MVar as MVar
+import           Control.Concurrent.MVar.Lifted (MVar)
+import qualified Control.Concurrent.MVar.Lifted as MVar 
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Control.Monad.Trans.State.Strict as State
@@ -21,6 +21,7 @@ import           Data.Aeson (ToJSON(..), FromJSON)
 import qualified Data.Aeson as Aeson
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import           Data.Maybe (isNothing)
 import           Data.Text as T
 import           Data.UUID (UUID)
 import qualified Data.UUID as UUID
@@ -31,6 +32,7 @@ import           Network.Socket (SockAddr)
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors (cors, simpleCorsResourcePolicy, CorsResourcePolicy(..))
+import           Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import           Network.Wai.Middleware.Servant.Options (provideOptions)
 import           Servant
 import           Servant.Elm (Proxy(Proxy))
@@ -41,6 +43,7 @@ type API =
   "api" :> "games" :> Get '[JSON] [GameId]
   :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameResponse)
   :<|> "api" :> RemoteHost :> "game" :> "new" :> Capture "dim" Int :> Post '[JSON] GameId
+  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "join" :> Post '[JSON] (Maybe GameResponse)
   :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameResponse)
 
 
@@ -48,6 +51,7 @@ startApp :: IO ()
 startApp = do
   storage <- MVar.newMVar Map.empty
   run 8080
+    $ logStdoutDev
     $ cors (const $ Just policy)
     $ provideOptions (Proxy :: Proxy API)
     $ app storage
@@ -69,12 +73,16 @@ server =
   getGameList
   :<|> getGame
   :<|> startGame
+  :<|> joinGame
   :<|> applyMove
 
 
 getGameList :: StateHandler [GameId]
 getGameList =
-  State.gets (fmap GameId . Map.keys)
+  State.gets (fmap GameId . Map.keys . Map.filter canBeJoined)
+  where
+    canBeJoined :: Game -> Bool
+    canBeJoined = isNothing . redPlayer
 
 
 getGame :: SockAddr -> GameId -> StateHandler (Maybe GameResponse)
@@ -88,6 +96,22 @@ startGame sender dim = do
   uid <- liftIO UUID.nextRandom
   State.modify (Map.insert uid (Game dim [] sender Nothing))
   return $ GameId uid
+
+
+joinGame :: SockAddr -> GameId -> StateHandler (Maybe GameResponse)
+joinGame sender (GameId uid) = do
+  gameFound <- State.gets (Map.lookup uid)
+  case gameFound of
+    Nothing -> return Nothing
+    Just game
+      | bluePlayer game == sender ->
+        return . Just $ generateResponse sender game
+      | isNothing (redPlayer game) || redPlayer game == Just sender -> do
+          let game' = game { redPlayer = Just sender }
+          State.modify (Map.insert uid game')
+          return . Just $ generateResponse sender game'
+      | otherwise ->
+        throwError (err400 { errBody = "you cannot join that game sorry" } :: ServantErr)
 
 
 applyMove :: SockAddr -> GameId -> SegCoord -> StateHandler (Maybe GameResponse)
@@ -105,7 +129,7 @@ applyMove sender (GameId uid) atCoord = do
               turn' = isPlayersTurn sender game state'
           return . Just $ GameResponse state' turn'
         else
-          throwError (err500 { errBody = "not your turn sorry" } :: ServantErr)
+          throwError (err400 { errBody = "not your turn sorry" } :: ServantErr)
 
 
 type StateHandler = StateT AppState Handler
@@ -148,11 +172,12 @@ stateToHandler :: MVar AppState -> StateT AppState Handler :~> Handler
 stateToHandler storage = NT stateToHandler'
   where
     stateToHandler' :: StateT AppState Handler res -> Handler res
-    stateToHandler' comp = do
-      state <- liftIO $ MVar.takeMVar storage
-      (res, state') <- State.runStateT comp state
-      liftIO $ MVar.putMVar storage state'
-      return res
+    stateToHandler' comp = MVar.modifyMVar
+        storage
+        (\ state -> do
+            (res, state') <- State.runStateT comp state
+            return (state', res)
+        )
 
 
 newtype TurnToken = TurnToken String

@@ -2,6 +2,7 @@ module Component.Game exposing (Model, Msg, GameId, init, update, view, subscrip
 
 import Html exposing (Html)
 import Html.Attributes as Attr
+import Html.Events as Ev
 import Svg exposing (Svg)
 import Svg.Attributes as SAttr
 import Svg.Events as SEv
@@ -35,6 +36,7 @@ type Msg
     | HoverIn SegCoord
     | HoverOut
     | ClickSeq SegCoord
+    | Refresh
     | LoadGameResult (Result Http.Error (Maybe GameResponse))
     | MakeMoveResult (Result Http.Error (Maybe GameResponse))
 
@@ -60,7 +62,7 @@ init flags dim gameId =
     , error = Nothing
     , loading = True
     }
-        ! [ loadGame flags.apiUrl gameId ]
+        ! [ joinGame flags.apiUrl gameId ]
 
 
 subscriptions : Model -> Sub Msg
@@ -73,6 +75,9 @@ update msg model =
     case msg of
         NoOp ->
             model ! []
+
+        Refresh ->
+            model ! [ loadGame model.flags.apiUrl model.gameId ]
 
         HoverIn coord ->
             if model.myTurn then
@@ -112,6 +117,7 @@ update msg model =
             -- TODO show error / move away
             { model
                 | loading = False
+                , hoverOver = Nothing
                 , myTurn = False
                 , error = Just (toString error)
             }
@@ -122,7 +128,11 @@ update msg model =
                 newModel =
                     setGameState model gameState
             in
-                { newModel | loading = False } ! []
+                { newModel
+                    | loading = False
+                    , hoverOver = Nothing
+                }
+                    ! []
 
 
 view : Model -> Html Msg
@@ -131,14 +141,28 @@ view model =
         width =
             model.dimension * 10 + 10
     in
-        Svg.svg
-            [ SAttr.viewBox <| "-5 -5 " ++ toString width ++ " " ++ toString width
-            ]
-            (List.concat
-                [ fillGrid model
-                , drawGrid model
+        Html.div
+            [ Attr.class "container" ]
+            [ Html.div
+                [ Attr.class "row" ]
+                [ Svg.svg
+                    [ SAttr.viewBox <| "-5 -5 " ++ toString width ++ " " ++ toString width
+                    ]
+                    (List.concat
+                        [ fillGrid model
+                        , drawGrid model
+                        ]
+                    )
                 ]
-            )
+            , Html.div
+                [ Attr.class "row" ]
+                [ Html.button
+                    [ Attr.class "btn btn-default"
+                    , Ev.onClick Refresh
+                    ]
+                    [ Html.text "refresh" ]
+                ]
+            ]
 
 
 
@@ -170,6 +194,11 @@ setGameState model response =
 loadGame : String -> GameId -> Cmd Msg
 loadGame apiUrl gameId =
     Http.send LoadGameResult (Api.getApiGameByGameId apiUrl gameId)
+
+
+joinGame : String -> GameId -> Cmd Msg
+joinGame apiUrl gameId =
+    Http.send LoadGameResult (Api.postApiGameByGameIdJoin apiUrl gameId)
 
 
 makeMove : String -> GameId -> SegCoord -> Cmd Msg

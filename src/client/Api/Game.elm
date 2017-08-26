@@ -81,6 +81,31 @@ postApiGameNewByDim urlBase capture_dim =
             False
         }
 
+postApiGameByGameIdJoin : String -> String -> Http.Request (Maybe (GameResponse))
+postApiGameByGameIdJoin urlBase capture_gameId =
+    Http.request
+        { method =
+            "POST"
+        , headers =
+            []
+        , url =
+            String.join "/"
+                [ urlBase
+                , "api"
+                , "game"
+                , capture_gameId |> Http.encodeUri
+                , "join"
+                ]
+        , body =
+            Http.emptyBody
+        , expect =
+            Http.expectJson (nullable decodeGameResponse)
+        , timeout =
+            Nothing
+        , withCredentials =
+            False
+        }
+
 postApiGameByGameIdMove : String -> String -> SegCoord -> Http.Request (Maybe (GameResponse))
 postApiGameByGameIdMove urlBase capture_gameId body =
     Http.request

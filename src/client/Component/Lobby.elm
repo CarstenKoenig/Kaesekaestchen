@@ -19,9 +19,8 @@ type alias Model =
 
 
 type Msg
-    = Refresh
-    | LoadGamesResult (Result Http.Error (List GameId))
-    | VisitGame GameId
+    = LoadGamesResult (Result Http.Error (List GameId))
+    | JoinGame GameId
     | StartNewGame
     | StartNewGameResult (Result Http.Error GameId)
 
@@ -48,13 +47,6 @@ subscriptions =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Refresh ->
-            { model
-                | runningGames = []
-                , error = Nothing
-            }
-                ! [ loadGames model.flags.apiUrl ]
-
         LoadGamesResult (Err error) ->
             -- TODO show error / move away
             { model
@@ -65,8 +57,8 @@ update msg model =
         LoadGamesResult (Ok games) ->
             { model | runningGames = games } ! []
 
-        VisitGame gameId ->
-            model ! [ Nav.newUrl (routeToUrl model.flags.baseUrl <| PlayGame gameId) ]
+        JoinGame gameId ->
+            model ! [ Nav.newUrl (routeToUrl model.flags.baseUrl <| ShowGameR gameId) ]
 
         StartNewGame ->
             model ! [ startNewGame model.flags.apiUrl defaultDim ]
@@ -79,7 +71,7 @@ update msg model =
                 ! []
 
         StartNewGameResult (Ok gameId) ->
-            model ! [ Nav.newUrl (routeToUrl model.flags.baseUrl <| PlayGame gameId) ]
+            model ! [ Nav.newUrl (routeToUrl model.flags.baseUrl <| ShowGameR gameId) ]
 
 
 view : Model -> Html Msg
@@ -114,7 +106,7 @@ viewGame : GameId -> Html Msg
 viewGame gameId =
     Html.button
         [ Attr.class "list-group-item list-group-item-action"
-        , Ev.onClick (VisitGame gameId)
+        , Ev.onClick (JoinGame gameId)
         ]
         [ Html.text gameId ]
 

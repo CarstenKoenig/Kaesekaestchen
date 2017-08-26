@@ -23,6 +23,7 @@ library
                      , bytestring
                      , containers
                      , elm-export
+                     , lifted-base
                      , mtl
                      , network
                      , servant-elm
@@ -33,6 +34,7 @@ library
                      , uuid
                      , wai
                      , wai-cors
+                     , wai-extra                     
                      , warp
   default-language:    Haskell2010
   ghc-options:       -Wall
