@@ -3,14 +3,16 @@ module Component.Game exposing (Model, Msg, GameId, init, update, view, subscrip
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Ev
+import Json.Decode as Json
 import Svg exposing (Svg)
 import Svg.Attributes as SAttr
 import Svg.Events as SEv
 import Svg.Keyed as SKeyed
 import Dict exposing (Dict)
 import Http
+import WebSocket as WS
 import Flags exposing (Flags)
-import Api.Game as Api exposing (Player(..), SegCoord(..), SegmentFill(..), GameState, GameResponse)
+import Api.Game as Api exposing (Player(..), SegCoord(..), SegmentFill(..), GameState, GameResponse, decodeGameResponse)
 
 
 type alias GameId =
@@ -37,6 +39,7 @@ type Msg
     | HoverOut
     | ClickSeq SegCoord
     | Refresh
+    | ReceivedUpdate GameResponse
     | LoadGameResult (Result Http.Error (Maybe GameResponse))
     | MakeMoveResult (Result Http.Error (Maybe GameResponse))
 
@@ -66,8 +69,8 @@ init flags dim gameId =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions =
-    always Sub.none
+subscriptions model =
+    websocketSub model.flags.apiUrl model.gameId
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -106,12 +109,15 @@ update msg model =
             }
                 ! []
 
-        LoadGameResult (Ok gameState) ->
+        LoadGameResult (Ok response) ->
             let
                 newModel =
-                    setGameState model gameState
+                    setGameState model response
             in
                 { newModel | loading = False } ! []
+
+        ReceivedUpdate response ->
+            setGameState model (Just response) ! []
 
         MakeMoveResult (Err error) ->
             -- TODO show error / move away
@@ -368,3 +374,25 @@ playerKey pl =
 
         Blue ->
             "blue"
+
+
+
+-------------------------------------------------
+-- Websocket
+
+
+websocketSub : String -> GameId -> Sub Msg
+websocketSub baseUrl gameId =
+    let
+        url =
+            "ws://localhost:8080/api/game/" ++ gameId ++ "/subscribe"
+
+        decode s =
+            case Json.decodeString decodeGameResponse s of
+                Err _ ->
+                    NoOp
+
+                Ok res ->
+                    ReceivedUpdate res
+    in
+        WS.listen url decode
