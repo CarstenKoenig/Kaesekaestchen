@@ -30,6 +30,7 @@ TAGS
 
 # no elm-stuff
 elm-stuff/
+/static/elm.js
 
 # no dropstack config
 .dropstack.json
