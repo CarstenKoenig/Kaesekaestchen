@@ -9,7 +9,7 @@
 module Lib
     ( GameId (..)
     , GameResponse (..)
-    , API
+    , API, StateAPI
     , startApp
     , app
     ) where
@@ -27,6 +27,7 @@ import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Control.Monad.Trans.State.Strict as State
 import           Data.Aeson (ToJSON(..), FromJSON, encode)
 import qualified Data.Aeson as Aeson
+import qualified Data.ByteString as BS
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           Data.Maybe (isNothing)
@@ -36,24 +37,35 @@ import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import           Elm (ElmType(..))
 import qualified Elm
+import           Lucid (Html)
+import qualified Lucid as Html
 import           Network.Socket (SockAddr)
-import           Network.WebSockets (Connection, forkPingThread, sendTextData)
+import           Network.WebSockets (Connection, forkPingThread, sendTextData) 
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors (cors, simpleCorsResourcePolicy, CorsResourcePolicy(..))
 import           Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import           Network.Wai.Middleware.Servant.Options (provideOptions)
 import           Servant
 import           Servant.API.WebSocket (WebSocket)
 import           Servant.Elm (Proxy(Proxy))
-import           Servant.Foreign (HasForeign(..))
-import           Servant.Foreign.Internal (EmptyForeignAPI (..))
+import           Servant.HTML.Lucid (HTML)
 import           Game
 
 
 type API =
-  StateAPI :<|> ReaderAPI
-  
+  StaticAPI
+  :<|> StateAPI
+  :<|> ReaderAPI
+  :<|> PageAPI
+
+
+type StaticAPI =
+  "static" :> Raw
+
+
+type PageAPI =
+  CaptureAll "segments" Text :> Get '[HTML] (Html ())
+
 
 type StateAPI =  
   "api" :> "games" :> Get '[JSON] [GameId]
@@ -74,7 +86,6 @@ startApp = do
   run 8080
     $ logStdoutDev
     $ cors (const $ Just policy)
-    $ provideOptions (Proxy :: Proxy API)
     $ app storage
   where
   policy = simpleCorsResourcePolicy
@@ -88,8 +99,23 @@ app storage =
 
 server :: MVar AppState -> ServerT API Handler
 server storage =
-  enter (stateToHandler storage) serveStateAPI
+  serveDirectoryFileServer "static"
+  :<|> enter (stateToHandler storage) serveStateAPI
   :<|> enter (readerToHandler storage) serveReaderAPI
+  :<|> serveSPA
+
+
+serveSPA :: ServerT PageAPI Handler
+serveSPA = provideIndex
+  where
+    provideIndex :: [Text] -> Handler (Html ())
+    provideIndex _ = liftIO indexPage
+
+
+indexPage :: IO (Html ())
+indexPage = do
+  content <- BS.readFile "index.html"
+  return $ Html.toHtmlRaw content
 
 
 serveStateAPI :: ServerT StateAPI StateHandler
@@ -276,11 +302,3 @@ instance FromHttpApiData GameId where
     case UUID.fromString s of
       Nothing -> Left . T.pack $ "no valid UUID-piece " ++ show piece
       Just uid -> return $ GameId uid
-
-
-----------------------------------------------------------------------
--- provide-options needs something like this ...
-
-instance HasForeign lang ftype WebSocket where
-  type Foreign ftype WebSocket = EmptyForeignAPI
-  foreignFor Proxy Proxy Proxy _ = EmptyForeignAPI

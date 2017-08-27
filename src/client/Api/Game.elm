@@ -5,10 +5,11 @@ import Json.Decode.Pipeline exposing (..)
 import Json.Encode
 import Http
 import String
+
+
 import Exts.Json.Encode
 
-
-getApiGames : String -> Http.Request (List String)
+getApiGames : String -> Http.Request (List (String))
 getApiGames urlBase =
     Http.request
         { method =
@@ -31,8 +32,7 @@ getApiGames urlBase =
             False
         }
 
-
-getApiGameByGameId : String -> String -> Http.Request (Maybe GameResponse)
+getApiGameByGameId : String -> String -> Http.Request (Maybe (GameResponse))
 getApiGameByGameId urlBase capture_gameId =
     Http.request
         { method =
@@ -56,8 +56,7 @@ getApiGameByGameId urlBase capture_gameId =
             False
         }
 
-
-postApiGameNewByDim : String -> Int -> Http.Request String
+postApiGameNewByDim : String -> Int -> Http.Request (String)
 postApiGameNewByDim urlBase capture_dim =
     Http.request
         { method =
@@ -82,8 +81,7 @@ postApiGameNewByDim urlBase capture_dim =
             False
         }
 
-
-postApiGameByGameIdJoin : String -> String -> Http.Request (Maybe GameResponse)
+postApiGameByGameIdJoin : String -> String -> Http.Request (Maybe (GameResponse))
 postApiGameByGameIdJoin urlBase capture_gameId =
     Http.request
         { method =
@@ -108,8 +106,7 @@ postApiGameByGameIdJoin urlBase capture_gameId =
             False
         }
 
-
-postApiGameByGameIdMove : String -> String -> SegCoord -> Http.Request (Maybe GameResponse)
+postApiGameByGameIdMove : String -> String -> SegCoord -> Http.Request (Maybe (GameResponse))
 postApiGameByGameIdMove urlBase capture_gameId body =
     Http.request
         { method =
@@ -134,87 +131,57 @@ postApiGameByGameIdMove urlBase capture_gameId body =
             False
         }
 
-
 type Player
     = Blue
     | Red
 
-
 decodePlayer : Decoder Player
 decodePlayer =
-    string
-        |> andThen
-            (\x ->
-                if x == "Blue" then
-                    decode Blue
-                else if x == "Red" then
-                    decode Red
-                else
-                    fail "Constructor not matched"
-            )
-
+    string |> andThen ( \x ->
+        if x == "Blue" then decode Blue
+        else if x == "Red" then decode Red
+        else fail "Constructor not matched" )
 
 type SegCoord
-    = HCoord ( Int, Int )
-    | VCoord ( Int, Int )
-
+    = HCoord (Int, Int)
+    | VCoord (Int, Int)
 
 decodeSegCoord : Decoder SegCoord
 decodeSegCoord =
-    field "tag" string
-        |> andThen
-            (\x ->
-                if x == "HCoord" then
-                    decode HCoord |> required "contents" (map2 (,) (index 0 int) (index 1 int))
-                else if x == "VCoord" then
-                    decode VCoord |> required "contents" (map2 (,) (index 0 int) (index 1 int))
-                else
-                    fail "Constructor not matched"
-            )
-
+    field "tag" string |> andThen ( \x ->
+        if x == "HCoord" then decode HCoord |> required "contents" (map2 (,) (index 0 int) (index 1 int))
+        else if x == "VCoord" then decode VCoord |> required "contents" (map2 (,) (index 0 int) (index 1 int))
+        else fail "Constructor not matched" )
 
 encodeSegCoord : SegCoord -> Json.Encode.Value
 encodeSegCoord x =
     case x of
-        HCoord y0 ->
-            Json.Encode.object
-                [ ( "tag", Json.Encode.string "HCoord" )
-                , ( "contents", (Exts.Json.Encode.tuple2 Json.Encode.int Json.Encode.int) y0 )
-                ]
-
-        VCoord y0 ->
-            Json.Encode.object
-                [ ( "tag", Json.Encode.string "VCoord" )
-                , ( "contents", (Exts.Json.Encode.tuple2 Json.Encode.int Json.Encode.int) y0 )
-                ]
-
+        HCoord y0 -> Json.Encode.object
+            [ ( "tag", Json.Encode.string "HCoord" )
+            , ( "contents", (Exts.Json.Encode.tuple2 Json.Encode.int Json.Encode.int) y0 )
+            ]
+        VCoord y0 -> Json.Encode.object
+            [ ( "tag", Json.Encode.string "VCoord" )
+            , ( "contents", (Exts.Json.Encode.tuple2 Json.Encode.int Json.Encode.int) y0 )
+            ]
 
 type SegmentFill
     = Wall
     | Color Player
 
-
 decodeSegmentFill : Decoder SegmentFill
 decodeSegmentFill =
-    field "tag" string
-        |> andThen
-            (\x ->
-                if x == "Wall" then
-                    decode Wall
-                else if x == "Color" then
-                    decode Color |> required "contents" decodePlayer
-                else
-                    fail "Constructor not matched"
-            )
-
+    field "tag" string |> andThen ( \x ->
+        if x == "Wall" then decode Wall
+        else if x == "Color" then decode Color |> required "contents" decodePlayer
+        else fail "Constructor not matched" )
 
 type alias GameState =
     { dimension : Int
-    , filledSegments : List ( SegmentFill, SegCoord )
-    , wonCells : List ( Player, ( Int, Int ) )
+    , filledSegments : List ((SegmentFill, SegCoord))
+    , wonCells : List ((Player, (Int, Int)))
     , playersTurn : Player
     }
-
 
 decodeGameState : Decoder GameState
 decodeGameState =
@@ -224,12 +191,10 @@ decodeGameState =
         |> required "wonCells" (list (map2 (,) (index 0 decodePlayer) (index 1 (map2 (,) (index 0 int) (index 1 int)))))
         |> required "playersTurn" decodePlayer
 
-
 type alias GameResponse =
     { gameState : GameState
     , yourMove : Bool
     }
-
 
 decodeGameResponse : Decoder GameResponse
 decodeGameResponse =

@@ -22,12 +22,12 @@ routeToUrl baseUrl route =
             baseUrl
 
         ShowGameR gameId ->
-            baseUrl ++ "/game/" ++ gameId
+            "game/" ++ gameId
 
 
 routeParser : String -> Parser (Route -> a) a
 routeParser baseUrl =
     Url.oneOf
-        [ Url.map LobbyR (Url.s baseUrl)
-        , Url.map ShowGameR (Url.s baseUrl </> Url.s "game" </> Url.string)
+        [ Url.map LobbyR (Url.top)
+        , Url.map ShowGameR (Url.s "game" </> Url.string)
         ]

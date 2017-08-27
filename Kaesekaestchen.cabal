@@ -24,13 +24,13 @@ library
                      , containers
                      , elm-export
                      , lifted-base
+                     , lucid
                      , mtl
                      , network
                      , servant-elm
-                     , servant-foreign
-                     , servant-websockets
-                     , servant-options                     
+                     , servant-lucid
                      , servant-server
+                     , servant-websockets
                      , transformers
                      , text
                      , uuid
