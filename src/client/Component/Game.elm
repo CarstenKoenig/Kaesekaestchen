@@ -70,7 +70,19 @@ init flags dim gameId =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    websocketSub model.flags.apiUrl model.gameId
+    let
+        url =
+            "ws://localhost:8080/api/game/" ++ model.gameId ++ "/subscribe"
+
+        decode s =
+            case Json.decodeString decodeGameResponse s of
+                Err _ ->
+                    NoOp
+
+                Ok res ->
+                    ReceivedUpdate res
+    in
+        WS.listen url decode
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -374,25 +386,3 @@ playerKey pl =
 
         Blue ->
             "blue"
-
-
-
--------------------------------------------------
--- Websocket
-
-
-websocketSub : String -> GameId -> Sub Msg
-websocketSub baseUrl gameId =
-    let
-        url =
-            "ws://localhost:8080/api/game/" ++ gameId ++ "/subscribe"
-
-        decode s =
-            case Json.decodeString decodeGameResponse s of
-                Err _ ->
-                    NoOp
-
-                Ok res ->
-                    ReceivedUpdate res
-    in
-        WS.listen url decode

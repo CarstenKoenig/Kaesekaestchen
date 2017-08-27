@@ -1,3 +1,6 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE TypeOperators   #-}
@@ -12,12 +15,17 @@ module Lib
     ) where
 
 import           GHC.Generics (Generic)
+import           Control.Concurrent.Chan (Chan)
+import qualified Control.Concurrent.Chan as Chan
 import           Control.Concurrent.MVar.Lifted (MVar)
 import qualified Control.Concurrent.MVar.Lifted as MVar 
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Reader (ReaderT)
+import qualified Control.Monad.Trans.Reader as Reader
 import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Control.Monad.Trans.State.Strict as State
-import           Data.Aeson (ToJSON(..), FromJSON)
+import           Data.Aeson (ToJSON(..), FromJSON, encode)
 import qualified Data.Aeson as Aeson
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -29,22 +37,35 @@ import qualified Data.UUID.V4 as UUID
 import           Elm (ElmType(..))
 import qualified Elm
 import           Network.Socket (SockAddr)
+import           Network.WebSockets (Connection, forkPingThread, sendTextData)
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors (cors, simpleCorsResourcePolicy, CorsResourcePolicy(..))
 import           Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import           Network.Wai.Middleware.Servant.Options (provideOptions)
 import           Servant
+import           Servant.API.WebSocket (WebSocket)
 import           Servant.Elm (Proxy(Proxy))
+import           Servant.Foreign (HasForeign(..))
+import           Servant.Foreign.Internal (EmptyForeignAPI (..))
 import           Game
 
 
 type API =
+  StateAPI :<|> ReaderAPI
+  
+
+type StateAPI =  
   "api" :> "games" :> Get '[JSON] [GameId]
   :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameResponse)
   :<|> "api" :> RemoteHost :> "game" :> "new" :> Capture "dim" Int :> Post '[JSON] GameId
   :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "join" :> Post '[JSON] (Maybe GameResponse)
   :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameResponse)
+
+
+type ReaderAPI =
+  "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "subscribe" :> WebSocket
+
 
 
 startApp :: IO () 
@@ -62,20 +83,27 @@ startApp = do
 
 app :: MVar AppState -> Application
 app storage =
-  serve api $ enter (stateToHandler storage) server
-  where
-    api :: Proxy API
-    api = Proxy
+  serve (Proxy :: Proxy API) $ server storage
 
 
-server :: ServerT API StateHandler
-server =
+server :: MVar AppState -> ServerT API Handler
+server storage =
+  enter (stateToHandler storage) serveStateAPI
+  :<|> enter (readerToHandler storage) serveReaderAPI
+
+
+serveStateAPI :: ServerT StateAPI StateHandler
+serveStateAPI = 
   getGameList
   :<|> getGame
   :<|> startGame
   :<|> joinGame
   :<|> applyMove
 
+
+serveReaderAPI :: ServerT ReaderAPI ReaderHandler
+serveReaderAPI =
+  subscribeGame
 
 getGameList :: StateHandler [GameId]
 getGameList =
@@ -93,8 +121,9 @@ getGame sender (GameId uid) = do
 
 startGame :: SockAddr -> Int -> StateHandler GameId
 startGame sender dim = do
+  chan <- liftIO Chan.newChan
   uid <- liftIO UUID.nextRandom
-  State.modify (Map.insert uid (Game dim [] sender Nothing))
+  State.modify (Map.insert uid (Game dim [] sender Nothing chan))
   return $ GameId uid
 
 
@@ -127,12 +156,29 @@ applyMove sender (GameId uid) atCoord = do
           State.modify (Map.insert uid (game { gameMoves = moves' }))
           let state' = calculateGameState (gameDimension game) moves'
               turn' = isPlayersTurn sender game state'
+          liftIO $ Chan.writeChan (channel game) (game, state')
           return . Just $ GameResponse state' turn'
         else
           throwError (err400 { errBody = "not your turn sorry" } :: ServantErr)
 
 
+subscribeGame :: SockAddr -> GameId -> Connection -> ReaderHandler ()
+subscribeGame sender (GameId uid) con = do
+  gameFound <- Reader.asks (Map.lookup uid)
+  case gameFound of
+    Nothing ->
+      lift $ throwError (err500 { errBody = "game not found" })
+    Just game ->
+      subscribeChannel toResponse con (channel game)
+  where
+    toResponse :: (Game, GameState) -> GameResponse
+    toResponse (game, state) =
+      let yourTurn = isPlayersTurn sender game state
+      in GameResponse state yourTurn
+
+
 type StateHandler = StateT AppState Handler
+type ReaderHandler = ReaderT AppState Handler
 
 
 type AppState = Map UUID Game
@@ -142,6 +188,7 @@ data Game = Game
   , gameMoves :: [SegCoord]
   , bluePlayer :: SockAddr
   , redPlayer :: Maybe SockAddr
+  , channel :: Chan (Game, GameState)
   }
 
 
@@ -153,6 +200,19 @@ data GameResponse = GameResponse
 instance ElmType GameResponse
 instance ToJSON GameResponse
 
+
+subscribeChannel :: (Show b, ToJSON b, MonadIO m) => (a -> b) -> Connection -> Chan a -> m ()
+subscribeChannel f con chan = liftIO $ do
+  duped <- Chan.dupChan chan
+  forkPingThread con 10
+  loop duped
+  where
+    loop c = do
+      a <- Chan.readChan c
+      let b = f a
+      sendTextData con (encode b)
+      loop c
+      
 
 generateResponse :: SockAddr -> Game -> GameResponse
 generateResponse sender game =
@@ -168,6 +228,7 @@ isPlayersTurn sender game state =
     Red  -> redPlayer game  == Just sender
 
 
+-- here lies the problem - 
 stateToHandler :: MVar AppState -> StateT AppState Handler :~> Handler
 stateToHandler storage = NT stateToHandler'
   where
@@ -180,16 +241,13 @@ stateToHandler storage = NT stateToHandler'
         )
 
 
-newtype TurnToken = TurnToken String
-  deriving (Show, Eq, Generic)
-
-instance ElmType TurnToken
-instance ToJSON TurnToken
-instance FromJSON TurnToken
-
-
-newToken :: IO TurnToken
-newToken = TurnToken . UUID.toString <$> UUID.nextRandom
+readerToHandler :: MVar AppState -> ReaderT AppState Handler :~> Handler
+readerToHandler storage = NT readerToHandler'
+  where
+    readerToHandler' :: ReaderT AppState Handler res -> Handler res
+    readerToHandler' comp = do
+      state <- MVar.readMVar storage
+      Reader.runReaderT comp state
 
 
 ----------------------------------------------------------------------
@@ -218,3 +276,11 @@ instance FromHttpApiData GameId where
     case UUID.fromString s of
       Nothing -> Left . T.pack $ "no valid UUID-piece " ++ show piece
       Just uid -> return $ GameId uid
+
+
+----------------------------------------------------------------------
+-- provide-options needs something like this ...
+
+instance HasForeign lang ftype WebSocket where
+  type Foreign ftype WebSocket = EmptyForeignAPI
+  foreignFor Proxy Proxy Proxy _ = EmptyForeignAPI

@@ -1,11 +1,12 @@
 flags: {}
 extra-package-dbs: []
 packages:
-- location: '.'
+- location: .
 - location:
     git: https://github.com/CarstenKoenig/elm-export.git
     commit: bad9f74e211fae26f95fda86bedcacdbba2c6ae2
   extra-dep: true
 extra-deps:
 - servant-options-0.1.0.0
+- servant-websockets-1.0.0
 resolver: lts-9.0

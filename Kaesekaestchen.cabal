@@ -27,6 +27,8 @@ library
                      , mtl
                      , network
                      , servant-elm
+                     , servant-foreign
+                     , servant-websockets
                      , servant-options                     
                      , servant-server
                      , transformers
@@ -36,6 +38,7 @@ library
                      , wai-cors
                      , wai-extra                     
                      , warp
+                     , websockets
   default-language:    Haskell2010
   ghc-options:       -Wall
 
