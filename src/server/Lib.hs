@@ -9,7 +9,7 @@
 module Lib
     ( GameId (..)
     , GameResponse (..)
-    , API, StateAPI
+    , API, RestfulApiRoutes
     , startApp
     , app
     ) where
@@ -52,34 +52,8 @@ import           Servant.HTML.Lucid (HTML)
 import           Game
 
 
-type API =
-  StaticAPI
-  :<|> StateAPI
-  :<|> ReaderAPI
-  :<|> PageAPI
-
-
-type StaticAPI =
-  "static" :> Raw
-
-
-type PageAPI =
-  CaptureAll "segments" Text :> Get '[HTML] (Html ())
-
-
-type StateAPI =  
-  "api" :> "games" :> Get '[JSON] [GameId]
-  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameResponse)
-  :<|> "api" :> RemoteHost :> "game" :> "new" :> Capture "dim" Int :> Post '[JSON] GameId
-  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "join" :> Post '[JSON] (Maybe GameResponse)
-  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameResponse)
-
-
-type ReaderAPI =
-  "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "subscribe" :> WebSocket
-
-
-
+-- | starts the server on Port 8080
+-- logs to STDOUT and uses simple CORS
 startApp :: IO () 
 startApp = do
   storage <- MVar.newMVar Map.empty
@@ -92,21 +66,64 @@ startApp = do
            { corsRequestHeaders = [ "content-type" ] }  
 
 
+-- | serves the servant-API defined through the `API` type as
+-- a WAI application
+-- needs a MVar that is used to store the application state
 app :: MVar AppState -> Application
 app storage =
   serve (Proxy :: Proxy API) $ server storage
 
 
+----------------------------------------------------------------------
+-- define the Web-API using types (servant)
+
+type API =
+  StaticFileRoutes
+  :<|> RestfulApiRoutes
+  :<|> WebsocketRoutes
+  :<|> ProvidedPages
+
+
+type StaticFileRoutes =
+  "static" :> Raw
+
+
+type ProvidedPages =
+  CaptureAll "segments" Text :> Get '[HTML] (Html ())
+
+
+type RestfulApiRoutes =  
+  "api" :> "games" :> Get '[JSON] [GameId]
+  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameResponse)
+  :<|> "api" :> RemoteHost :> "game" :> "new" :> Capture "dim" Int :> Post '[JSON] GameId
+  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "join" :> Post '[JSON] (Maybe GameResponse)
+  :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "move" :> ReqBody '[JSON] SegCoord :> Post '[JSON] (Maybe GameResponse)
+
+
+type WebsocketRoutes =
+  "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> "subscribe" :> WebSocket
+
+
+----------------------------------------------------------------------
+-- handlers for the various parts of the servant application
+
+-- | Handler of this type might modify the App-State
+type StateHandler = StateT AppState Handler
+
+-- || Handler of this type might read the App-State
+type ReaderHandler = ReaderT AppState Handler
+
+
 server :: MVar AppState -> ServerT API Handler
 server storage =
   serveDirectoryFileServer "static"
-  :<|> enter (stateToHandler storage) serveStateAPI
-  :<|> enter (readerToHandler storage) serveReaderAPI
-  :<|> serveSPA
+  :<|> enter (stateToHandler storage) apiHandler
+  :<|> enter (readerToHandler storage) websocketRoutesHandler
+  :<|> pageHandler
 
 
-serveSPA :: ServerT PageAPI Handler
-serveSPA = provideIndex
+pageHandler :: ServerT ProvidedPages Handler
+pageHandler = provideIndex
   where
     provideIndex :: [Text] -> Handler (Html ())
     provideIndex _ = liftIO indexPage
@@ -118,8 +135,8 @@ indexPage = do
   return $ Html.toHtmlRaw content
 
 
-serveStateAPI :: ServerT StateAPI StateHandler
-serveStateAPI = 
+apiHandler :: ServerT RestfulApiRoutes StateHandler
+apiHandler = 
   getGameList
   :<|> getGame
   :<|> startGame
@@ -127,9 +144,10 @@ serveStateAPI =
   :<|> applyMove
 
 
-serveReaderAPI :: ServerT ReaderAPI ReaderHandler
-serveReaderAPI =
+websocketRoutesHandler :: ServerT WebsocketRoutes ReaderHandler
+websocketRoutesHandler =
   subscribeGame
+
 
 getGameList :: StateHandler [GameId]
 getGameList =
@@ -203,58 +221,6 @@ subscribeGame sender (GameId uid) con = do
       in GameResponse state yourTurn
 
 
-type StateHandler = StateT AppState Handler
-type ReaderHandler = ReaderT AppState Handler
-
-
-type AppState = Map UUID Game
-
-data Game = Game
-  { gameDimension :: Int
-  , gameMoves :: [SegCoord]
-  , bluePlayer :: SockAddr
-  , redPlayer :: Maybe SockAddr
-  , channel :: Chan (Game, GameState)
-  }
-
-
-data GameResponse = GameResponse
-  { gameState :: GameState
-  , yourMove  :: Bool
-  } deriving (Eq, Show, Generic)
-
-instance ElmType GameResponse
-instance ToJSON GameResponse
-
-
-subscribeChannel :: (Show b, ToJSON b, MonadIO m) => (a -> b) -> Connection -> Chan a -> m ()
-subscribeChannel f con chan = liftIO $ do
-  duped <- Chan.dupChan chan
-  forkPingThread con 10
-  loop duped
-  where
-    loop c = do
-      a <- Chan.readChan c
-      let b = f a
-      sendTextData con (encode b)
-      loop c
-      
-
-generateResponse :: SockAddr -> Game -> GameResponse
-generateResponse sender game =
-  let state = calculateGameState (gameDimension game) (gameMoves game)
-      turn = isPlayersTurn sender game state
-  in GameResponse state turn
-
-
-isPlayersTurn :: SockAddr -> Game -> GameState -> Bool
-isPlayersTurn sender game state =
-  case playersTurn state of
-    Blue -> bluePlayer game == sender
-    Red  -> redPlayer game  == Just sender
-
-
--- here lies the problem - 
 stateToHandler :: MVar AppState -> StateT AppState Handler :~> Handler
 stateToHandler storage = NT stateToHandler'
   where
@@ -275,6 +241,65 @@ readerToHandler storage = NT readerToHandler'
       state <- MVar.readMVar storage
       Reader.runReaderT comp state
 
+
+----------------------------------------------------------------------
+-- Application State
+
+-- | the application-state is just a map from the games-Id (UUID) to a game record
+type AppState = Map UUID Game
+
+-- | State of a single Game
+data Game = Game
+  { gameDimension :: Int
+  , gameMoves :: [SegCoord]
+  , bluePlayer :: SockAddr
+  , redPlayer :: Maybe SockAddr
+  , channel :: Chan (Game, GameState)
+  }
+
+
+-- | the game-information that is transfered to the client
+data GameResponse = GameResponse
+  { gameState :: GameState
+  , yourMove  :: Bool
+  } deriving (Eq, Show, Generic)
+
+
+instance ElmType GameResponse
+instance ToJSON GameResponse
+
+
+generateResponse :: SockAddr -> Game -> GameResponse
+generateResponse sender game =
+  let state = calculateGameState (gameDimension game) (gameMoves game)
+      turn = isPlayersTurn sender game state
+  in GameResponse state turn
+
+
+isPlayersTurn :: SockAddr -> Game -> GameState -> Bool
+isPlayersTurn sender game state =
+  case playersTurn state of
+    Blue -> bluePlayer game == sender
+    Red  -> redPlayer game  == Just sender
+
+
+----------------------------------------------------------------------
+-- we use a simple Channel approach here to notify clients about game-changes
+-- via the websocket-route above
+
+
+subscribeChannel :: (Show b, ToJSON b, MonadIO m) => (a -> b) -> Connection -> Chan a -> m ()
+subscribeChannel f con chan = liftIO $ do
+  duped <- Chan.dupChan chan
+  forkPingThread con 10
+  loop duped
+  where
+    loop c = do
+      a <- Chan.readChan c
+      let b = f a
+      sendTextData con (encode b)
+      loop c
+      
 
 ----------------------------------------------------------------------
 -- warp UUIDs as parts in the queries/results

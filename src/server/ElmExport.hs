@@ -32,7 +32,7 @@ spec = Spec
   : "import Exts.Json.Encode"
   : Elm.generateElmForAPIWith
     (Elm.defElmOptions { Elm.urlPrefix = Elm.Dynamic })
-    (Proxy :: Proxy StateAPI)
+    (Proxy :: Proxy RestfulApiRoutes)
   ++
   [ Elm.toElmTypeSource    (Proxy :: Proxy Player)
   , Elm.toElmDecoderSource (Proxy :: Proxy Player)
