@@ -52,12 +52,12 @@ import           Servant.HTML.Lucid (HTML)
 import           Game
 
 
--- | starts the server on Port 8080
+-- | starts the server on the given port
 -- logs to STDOUT and uses simple CORS
-startApp :: IO () 
-startApp = do
+startApp :: Int -> IO () 
+startApp port = do
   storage <- MVar.newMVar Map.empty
-  run 8080
+  run port
     $ logStdoutDev
     $ cors (const $ Just policy)
     $ app storage
