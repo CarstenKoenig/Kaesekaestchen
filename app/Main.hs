@@ -14,13 +14,13 @@ instance Options MainOpts where
 newtype ServerOpts = ServerOpts { port :: Int }
 instance Options ServerOpts where
     defineOptions = pure ServerOpts
-        <*> simpleOption "start" 8080 "which port to start the server on"
+        <*> simpleOption "port" 8080 "which port to start the server on"
 
 
 newtype ExportOpts = ExportOpts { exportToPath :: FilePath }
 instance Options ExportOpts where
     defineOptions = pure ExportOpts
-        <*> simpleOption "output" "src/client" "where to export the elm code"
+        <*> simpleOption "path" "src/client" "where to export the elm code"
 
 
 start :: MainOpts -> ServerOpts -> [String] -> IO ()
