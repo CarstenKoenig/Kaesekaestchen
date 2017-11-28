@@ -49,7 +49,7 @@ data SegmentFill
 instance ElmType SegmentFill
 instance ToJSON SegmentFill
 
-  
+
 data SegCoord
   = HCoord Coord
   | VCoord Coord
@@ -80,7 +80,6 @@ foldMoves dim coords =
   let (next, moves, cells) =
         foldl' doMove (Blue, walls, startCells) coords
   in GameState dim (reverse moves) (getWonCells cells) next
-        
   where
     walls = generateWalls dim
     startCells = foldl' (flip $ placeSegment Nothing) Map.empty $ map snd walls
@@ -111,7 +110,6 @@ generateWalls dim =
   ++ [ (Wall, VCoord (dim,y)) | y <- [0..dim-1] ]
   ++ [ (Wall, HCoord (x,0)) | x <- [0..dim-1] ]
   ++ [ (Wall, HCoord (x,dim)) | x <- [0..dim-1] ]
-  
 
 type Cells = Map Coord CellState
 
@@ -150,7 +148,7 @@ setBot player cell =
   in Just $ cell' { bottomBorder = True
                   , filledBy = player
                   }
-  
+
 
 setLeft :: Maybe Player -> Maybe CellState -> Maybe CellState
 setLeft player cell =

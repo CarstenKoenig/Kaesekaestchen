@@ -72,7 +72,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     let
         url =
-            "ws://localhost:8080/api/game/" ++ model.gameId ++ "/subscribe"
+            "wss://" ++ String.dropLeft (String.length "https://") model.flags.apiUrl ++ "/api/game/" ++ model.gameId ++ "/subscribe"
 
         decode s =
             case Json.decodeString decodeGameResponse s of

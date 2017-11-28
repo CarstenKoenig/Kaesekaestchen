@@ -92,7 +92,7 @@ type ProvidedPages =
   CaptureAll "segments" Text :> Get '[HTML] (Html ())
 
 
-type RestfulApiRoutes =  
+type RestfulApiRoutes =
   "api" :> "games" :> Get '[JSON] [GameId]
   :<|> "api" :> RemoteHost :> "game" :> Capture "gameId" GameId :> Get '[JSON] (Maybe GameResponse)
   :<|> "api" :> RemoteHost :> "game" :> "new" :> Capture "dim" Int :> Post '[JSON] GameId
@@ -159,7 +159,7 @@ getGameList =
 
 getGame :: SockAddr -> GameId -> StateHandler (Maybe GameResponse)
 getGame sender (GameId uid) = do
-  game <- State.gets (Map.lookup uid) 
+  game <- State.gets (Map.lookup uid)
   return $ fmap (generateResponse sender) game
 
 
@@ -299,7 +299,7 @@ subscribeChannel f con chan = liftIO $ do
       let b = f a
       sendTextData con (encode b)
       loop c
-      
+
 
 ----------------------------------------------------------------------
 -- warp UUIDs as parts in the queries/results
@@ -321,7 +321,7 @@ instance FromJSON GameId where
       Just uid -> return $ GameId uid
 
 
-instance FromHttpApiData GameId where      
+instance FromHttpApiData GameId where
   parseUrlPiece piece = do
     s <- parseUrlPiece piece
     case UUID.fromString s of
