@@ -11,9 +11,9 @@ install: Kaesekaestchen
 
 clean:
 	rm -rf .stack-work/
-	rm ./static/elm.js
+	rm -f ./static/elm.js
 	rm -rf ./src/client/elm-stuff/
-	rm ./src/client/Api/Game.elm
+	rm -f ./src/client/Api/Game.elm
 
 
 elm.js : Game.elm
@@ -22,6 +22,7 @@ elm.js : Game.elm
 
 
 Game.elm: Kaesekaestchen-exe
+	mkdir -p ./src/client/Api
 	stack exec Kaesekaestchen -- export
 
 
@@ -31,4 +32,3 @@ Kaesekaestchen-exe: setup
 
 setup:
 	stack setup
-	
